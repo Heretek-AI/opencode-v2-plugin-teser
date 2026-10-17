@@ -1,0 +1,4 @@
+plugin:
+  path: .
+expect:
+  tools: [echo_tool]

@@ -1,0 +1,8 @@
+id: no-entry-smoke
+description: Documents the expected outcome (validate/run exits 2, no server entry)
+mode: scripted
+prompt: Hello.
+script:
+  - text: ok
+expect:
+  exitCode: 0

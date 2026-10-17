@@ -1,0 +1,7 @@
+{
+	"name": "fixture-throws",
+	"type": "module",
+	"exports": {
+		"./server": "./src/server.ts"
+	}
+}

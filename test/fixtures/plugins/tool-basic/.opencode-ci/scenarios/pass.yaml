@@ -1,0 +1,15 @@
+id: tool-basic-pass
+description: echo_tool is called and returns echo:hi
+mode: scripted
+prompt: Say hi through the echo tool.
+script:
+  - toolCalls:
+      - name: echo_tool
+        arguments: { text: hi }
+  - text: done
+expect:
+  exitCode: 0
+  tools:
+    - name: echo_tool
+      status: completed
+      output: { contains: "echo:hi" }

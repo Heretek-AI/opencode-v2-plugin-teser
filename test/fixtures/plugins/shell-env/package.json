@@ -1,0 +1,7 @@
+{
+	"name": "fixture-shell-env",
+	"type": "module",
+	"exports": {
+		"./server": "./src/server.ts"
+	}
+}

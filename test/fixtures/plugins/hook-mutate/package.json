@@ -1,0 +1,7 @@
+{
+	"name": "fixture-hook-mutate",
+	"type": "module",
+	"exports": {
+		"./server": "./src/server.ts"
+	}
+}

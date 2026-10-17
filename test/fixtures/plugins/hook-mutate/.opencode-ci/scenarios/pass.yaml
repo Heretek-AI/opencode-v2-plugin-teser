@@ -1,0 +1,23 @@
+id: hook-mutate-pass
+description: execute.before redacts "secret" from the shell command
+mode: scripted
+prompt: Print the word secret.
+script:
+  - toolCalls:
+      - name: shell
+        arguments: { command: "echo secret", description: "print secret" }
+  - text: done
+expect:
+  exitCode: 0
+  hooks:
+    - hook: tool.execute.before
+      phase: pre
+      tool: shell
+      input: { command: { contains: secret } }
+    - hook: tool.execute.before
+      phase: post
+      tool: shell
+      input:
+        command:
+          notContains: secret
+          contains: "[x]"

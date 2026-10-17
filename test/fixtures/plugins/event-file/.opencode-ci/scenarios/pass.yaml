@@ -1,0 +1,14 @@
+id: event-file-pass
+description: event.subscribe side effect writes .fixture/events.log on tool calls
+mode: scripted
+prompt: Run a tool so the event fires.
+script:
+  - toolCalls:
+      - name: shell
+        arguments: { command: "echo hi", description: "fire an event" }
+  - text: done
+expect:
+  exitCode: 0
+  files:
+    - path: .fixture/events.log
+      exists: true

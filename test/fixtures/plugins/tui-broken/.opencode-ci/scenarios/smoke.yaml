@@ -1,0 +1,8 @@
+id: tui-broken-smoke
+description: Documents the expected outcome (static tier 1 fails on import)
+mode: scripted
+prompt: Hello.
+script:
+  - text: ok
+expect:
+  exitCode: 0
