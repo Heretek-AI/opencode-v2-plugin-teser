@@ -102,3 +102,35 @@ matched on `ns_spike_echo` to apply the `+A` mutation. A wrong direct call
   needed before `./node_modules/.bin/opencode` appeared. The repo-root
   `package.json` picked up a transient `allowScripts` edit during the first
   attempt; it was reverted (`git status` clean except this file).
+
+# M3 notes (2026-10-17): sandbox, binary resolution, events, logs
+
+Files: `src/opencode/binary.ts`, `src/opencode/events.ts`,
+`src/opencode/logs.ts`, `src/sandbox/sandbox.ts`,
+`test/unit/logs.test.ts`, `test/unit/events.test.ts`,
+`test/e2e/sandbox.test.ts`. `bun run check` green (17 unit tests pass);
+e2e: 2 pass in ~2.6s wall (`OPENCODE_BIN=review/oc/...`).
+
+## E2E timing (M3 acceptance)
+
+`test/e2e/sandbox.test.ts` (Sandbox, no plugins, inline stub script
+`[{text:"ok"}]`, prompt `"Say ok."`): `code=0`, `textOf` contains `"ok"`,
+zero `error` events. A single `run()` takes ~1.2s wall
+(`durationMs=1165`-1218); the two-test file runs in ~2.5-2.6s total.
+opencode used: `opencode v2.0.26` via `OPENCODE_BIN`.
+
+## Section 2.6 cache question: is @ai-sdk/openai-compatible downloaded per sandbox?
+
+Answer: **no** (with the pinned binary). Evidence from a kept sandbox
+(`OPENCODE_PLUGIN_CI_KEEP=1`, two consecutive `run()` calls):
+
+- First run wall 1173ms, second run wall 1138ms -- no warm-up benefit.
+- No `download`/`install`/`fetch` lines in stderr.
+- Nothing named `*openai-compatible*` (no `.tgz`, no `node_modules`)
+  anywhere under the sandbox root after the runs; `home/`, `cache/` and
+  `state/` are empty (0 bytes), `data/` is 376K of opencode-internal state.
+  The only thing opencode creates under the isolated `XDG_CACHE_HOME` is an
+  empty `opencode/bin` dir.
+- The provider package resolves from inside the opencode binary itself, so
+  an isolated `XDG_CACHE_HOME` per sandbox costs nothing. No shared cache
+  needed for speed; per-run temp dirs stay fast (~1.2s per `run()`).
