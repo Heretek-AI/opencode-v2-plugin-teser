@@ -1,0 +1,15 @@
+name: plugin-ci
+on: [push, pull_request]
+permissions:
+  contents: read
+  actions: read # flake gate history
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Heretek-AI/opencode-v2-plugin-teser@v1
+        with:
+          tiers: load,scripted,live # live auto-skips without a key
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

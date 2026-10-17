@@ -236,3 +236,50 @@ API (call sites adapted, verbatim file untouched).
   with real `createdAt` timestamps so date-bound acknowledgments work)
   instead of row arrays, and skips runs whose conclusion is not
   success/failure (mirroring `e2e-gate.ts`).
+
+# M13 notes (2026-10-17): composite action, docs, repo CI
+
+Files: `action.yml` (new), `examples/workflow.yml` (new), `README.md`
+(rewrite), `.github/workflows/ci.yml` (new). `bun run check` green
+(213 unit tests pass); `actionlint` 1.7.12 passes on both workflow files.
+
+## actionlint scope
+
+`actionlint` only lints workflows, not composite actions, so it was run as
+`actionlint .github/workflows/ci.yml examples/workflow.yml` (exit 0).
+Running it on `action.yml` reports spurious "jobs/on section is missing"
+errors because that file is a `runs.using: composite` action, not a
+workflow. `action.yml` was instead checked by hand against the M13 spec:
+inputs travel through `env:` (`IN_TIERS`, `IN_VERSIONS`, `ACTION_PATH`)
+and are never interpolated into a `run:` script; `bun install
+--frozen-lockfile` runs in `${{ github.action_path }}` before the run step.
+
+## gate.artifact wiring (already in place, verified not added)
+
+`src/config/schema.ts` already defaults `gate.artifact` to
+`opencode-plugin-ci-results` (M12), `src/gate/gate.ts` passes
+`ctx.config.gate.artifact` as `fetchHistory({ artifact, ... })`, and
+`src/gate/history.ts` downloads with `gh run download <id> --name
+<artifact>`. The action's new `artifact-name` input defaults to the same
+string, so no code changes were needed — only the README matrix
+instructions (distinct `artifact-name` per leg + the same value in that
+leg's `gate.artifact`).
+
+## README quickstart verification (local-bin substitution)
+
+`bunx @heretek-ai/opencode-plugin-ci` requires the package to be published,
+which it is not yet, so the quickstart was followed literally in a fresh
+`/tmp` copy of `test/fixtures/plugins/tool-basic` with `bun
+<repo>/bin/opencode-plugin-ci.ts` in place of `bunx ...` and
+`OPENCODE_BIN=<repo>/review/oc/...`: `init --force` (exit 0),
+`validate` (exit 0, resolves `src/server.ts` via the fixture's
+`exports["./server"]`), `run --scenario example` (exit 0, tier 1 + example
+scripted pass, `report.md` written with 2 passed / 0 failed). Two things
+the copy taught the README:
+
+- `init` refuses to overwrite an existing `.opencode-ci/`, so the
+  quickstart uses `init --force` (identical on a fresh plugin) with a note.
+- `init` only adds starter files; the fixture's deliberate `fail.yaml`
+  stays, so the quickstart runs `--scenario example` (the scaffolded
+  starter) rather than the full suite. Full `run` in the unmodified fixture
+  still exits 1 on `tool-basic-fail` by design.
