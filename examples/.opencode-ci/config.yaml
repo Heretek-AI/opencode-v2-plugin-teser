@@ -1,0 +1,7 @@
+# Example config written by `opencode-plugin-ci init`. Edit to match your plugin.
+plugin:
+  path: .
+expect:
+  tools: []
+opencode:
+  versions: ["2.0.26"]

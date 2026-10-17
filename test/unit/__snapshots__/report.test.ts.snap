@@ -1,0 +1,48 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderMarkdown matches snapshot 1`] = `
+"# opencode-plugin-ci report
+
+- plugin: fixture-tool-basic
+- tool: 0.1.0
+- opencode: 2.0.26, latest
+- sha: abc1234
+- date: 2026-10-17T00:00:00.000Z
+
+**Totals:** 3 passed, 2 failed, 1 skipped (6 cases across 2 opencode versions)
+
+## opencode 2.0.26 (required)
+
+| Tier | Case | Result | Tools | Steps | Cost | Time |
+|---|---|---|---|---|---|---|
+| load | load | ✅ pass | echo_tool | 1 | $0.0000 | 1.5s |
+| scripted | tool-basic-pass | ✅ pass | echo_tool, shell | 2 | - | 23.4s |
+| scripted | tool-basic-fail | ❌ fail | echo_tool | 2 | - | 22.1s |
+| live | future-live | ⏭️ skipped (live tier not implemented (M11)) | - | - | - | 0ms |
+| live | live-real | ✅ pass | - | 3 | $0.0123 | 60.0s |
+
+<details><summary><code>2.0.26 / tool-basic-fail</code> — scripted failed</summary>
+
+- tools[0].output: expected to contain "echo:bye", got "echo:hi"
+
+Evidence: \`.opencode-ci/out/2.0.26/tool-basic-fail\`
+
+</details>
+
+## opencode latest (allowed to fail)
+
+| Tier | Case | Result | Tools | Steps | Cost | Time |
+|---|---|---|---|---|---|---|
+| scripted | tool-basic-fail | ⚠️ allowed failure | - | - | - | 5.0s |
+
+<details><summary><code>latest / tool-basic-fail</code> — scripted failed</summary>
+
+- opencode exited with code 1.
+
+Evidence: \`.opencode-ci/out/latest/tool-basic-fail\`
+
+</details>
+
+Live totals: $0.0123 across 1 case; 1000 input / 200 output tokens.
+"
+`;

@@ -19,6 +19,7 @@
 		"src",
 		"probe",
 		"schema",
+		"examples",
 		"README.md",
 		"LICENSE",
 		"NOTICE"

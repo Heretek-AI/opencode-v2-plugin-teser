@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ConfigError } from "../config/load.ts";
 import { resolveEntries } from "../plugin/entry.ts";
-import type { CaseResult } from "./load.ts";
+import type { CaseResult } from "../report/results.ts";
 
 export interface RunUiStaticOptions {
 	pluginPath: string;

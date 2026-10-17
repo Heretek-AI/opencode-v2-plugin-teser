@@ -35,7 +35,7 @@ function respondSSE(
 		id,
 		object: "chat.completion.chunk",
 		created: Math.floor(Date.now() / 1000),
-		model: (body["model"] as string) ?? "scripted",
+		model: (body.model as string) ?? "scripted",
 	};
 	res.writeHead(200, {
 		"content-type": "text/event-stream",
@@ -74,7 +74,7 @@ function respondJSON(
 			id: `chatcmpl-stub-${Date.now()}`,
 			object: "chat.completion",
 			created: Math.floor(Date.now() / 1000),
-			model: body["model"] ?? "scripted",
+			model: body.model ?? "scripted",
 			choices: [
 				{
 					index: 0,
@@ -115,9 +115,9 @@ async function startInlineStub(): Promise<InlineStub> {
 		}
 		const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
 		const hasTools =
-			Array.isArray(body["tools"]) && (body["tools"] as unknown[]).length > 0;
+			Array.isArray(body.tools) && (body.tools as unknown[]).length > 0;
 		const text = hasTools ? "ok" : "Stub title";
-		if (body["stream"] === true) {
+		if (body.stream === true) {
 			respondSSE(res, body, text);
 		} else {
 			respondJSON(res, body, text);

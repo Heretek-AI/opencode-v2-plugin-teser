@@ -2,8 +2,6 @@
 // assert it registers (inventory), stays silent in the logs, and provides
 // every expected tool/command/agent/skill/mcp name.
 //
-// TODO(M10): move CaseResult to src/report/results.ts and import it here.
-// Until then this local definition is the canonical tier-1 result shape.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ConfigError } from "../config/load.ts";
@@ -12,27 +10,12 @@ import { parseLogs, pluginLogProblems } from "../opencode/logs.ts";
 import { resolveEntries } from "../plugin/entry.ts";
 import { writeShim } from "../plugin/shim.ts";
 import { probePluginDirs, readProbe } from "../probe/read.ts";
+import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
 
-export interface CaseResult {
-	id: string;
-	tier: "load" | "scripted" | "live";
-	opencode: string;
-	pass: boolean;
-	skipped?: string;
-	description?: string;
-	failures?: string[];
-	tools?: string[];
-	steps?: number;
-	costUSD?: number;
-	tokens?: { input: number; output: number };
-	durationMs: number;
-	textExcerpt?: string;
-	attempts?: { pass: boolean; failures: string[] }[];
-	judge?: { pass: boolean; reason: string };
-	kept?: string;
-}
+// Re-exported so existing importers (`./load.ts`) keep working.
+export type { CaseResult } from "../report/results.ts";
 
 export interface LoadTierExpected {
 	tools?: string[];

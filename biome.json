@@ -15,7 +15,8 @@
 			"!review",
 			"!schema",
 			"!test/fixtures/**/node_modules",
-			"!.opencode-ci/out"
+			"!.opencode-ci/out",
+			"!**/.opencode-ci/out"
 		]
 	}
 }

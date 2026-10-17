@@ -11,9 +11,9 @@ import type { Config, Scenario } from "../config/schema.ts";
 import { textOf, usage } from "../opencode/events.ts";
 import { writeShim } from "../plugin/shim.ts";
 import { probePluginDirs, readProbe } from "../probe/read.ts";
+import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
-import type { CaseResult } from "./load.ts";
 
 export interface RunScenarioOptions {
 	scenario: Scenario;

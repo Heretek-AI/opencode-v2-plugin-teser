@@ -1,0 +1,8 @@
+id: example
+description: Example scripted scenario (edit me).
+mode: scripted
+prompt: Say hello.
+script:
+  - text: done
+expect:
+  text: { contains: done }

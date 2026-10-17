@@ -121,10 +121,10 @@ export class Sandbox {
 			plugins: opts.plugins,
 		};
 		if (opts.stubUrl !== undefined) {
-			config["providers"] = stubProvider(opts.stubUrl);
+			config.providers = stubProvider(opts.stubUrl);
 		}
 		if (opts.agents !== undefined) {
-			config["agents"] = opts.agents;
+			config.agents = opts.agents;
 		}
 		writeFileSync(
 			join(configHome, "opencode", "opencode.jsonc"),

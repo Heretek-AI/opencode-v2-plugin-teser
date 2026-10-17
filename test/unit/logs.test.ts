@@ -30,25 +30,23 @@ describe("parseLogLine", () => {
 
 	test("handles msg= instead of message=", () => {
 		const parsed = parseLogLine(LOADING);
-		expect(parsed?.["msg"]).toBe("loading plugin");
-		expect(parsed?.["id"]).toBe("/tmp/claude-0/spike/plugins/a");
-		expect(parsed?.["entrypoint"]).toBe(
+		expect(parsed?.msg).toBe("loading plugin");
+		expect(parsed?.id).toBe("/tmp/claude-0/spike/plugins/a");
+		expect(parsed?.entrypoint).toBe(
 			"file:///tmp/claude-0/spike/plugins/a/server.ts",
 		);
-		expect(parsed?.["level"]).toBe("INFO");
+		expect(parsed?.level).toBe("INFO");
 	});
 
 	test("parses a path target with slashes and dots", () => {
 		const parsed = parseLogLine(NOT_A_DIR);
-		expect(parsed?.["message"]).toBe(
-			"configured plugin path must be a directory",
-		);
-		expect(parsed?.["target"]).toBe("/tmp/claude-0/spike/plugins/a.ts");
+		expect(parsed?.message).toBe("configured plugin path must be a directory");
+		expect(parsed?.target).toBe("/tmp/claude-0/spike/plugins/a.ts");
 	});
 
 	test("unescapes quoted quotes", () => {
 		const parsed = parseLogLine('level=INFO message="say \\"hi\\""');
-		expect(parsed?.["message"]).toBe('say "hi"');
+		expect(parsed?.message).toBe('say "hi"');
 	});
 
 	test("returns undefined for empty lines", () => {

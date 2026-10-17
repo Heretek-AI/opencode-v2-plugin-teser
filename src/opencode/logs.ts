@@ -90,7 +90,7 @@ export function pluginLogProblems(
 ): LogLine[] {
 	const problems: LogLine[] = [];
 	for (const line of lines) {
-		const level = line["level"];
+		const level = line.level;
 		if (level === "ERROR" || level === "FATAL") {
 			const namesId = filter.id !== undefined && line._raw.includes(filter.id);
 			const namesPath =
@@ -100,7 +100,7 @@ export function pluginLogProblems(
 				continue;
 			}
 		}
-		const message = line["message"] ?? line["msg"];
+		const message = line.message ?? line.msg;
 		if (
 			message === "failed to load plugin" &&
 			filter.id !== undefined &&
