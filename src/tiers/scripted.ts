@@ -1,0 +1,185 @@
+// Tier 2: run one scripted scenario per sandbox against the stub model,
+// then evaluate the scenario `expect` block against the recorded evidence.
+// Each scenario gets its own stub, sandbox, and evidence directory, so
+// scenarios can run concurrently through the `pool` helper below.
+
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
+import { join, resolve } from "node:path";
+import { evaluate } from "../assert/expect.ts";
+import type { Config, Scenario } from "../config/schema.ts";
+import { textOf, usage } from "../opencode/events.ts";
+import { writeShim } from "../plugin/shim.ts";
+import { probePluginDirs, readProbe } from "../probe/read.ts";
+import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
+import { startStub } from "../stub/stub.ts";
+import type { CaseResult } from "./load.ts";
+
+export interface RunScenarioOptions {
+	scenario: Scenario;
+	config: Config;
+	pluginPath: string;
+	serverEntry: string;
+	opencodeBin: string;
+	outDir: string;
+	version: string;
+	logLevel?: "info" | "all";
+}
+
+/**
+ * Run one scenario: stub + sandbox + run + evidence files + evaluate.
+ * Never throws for scenario failures; only for setup bugs (missing probe
+ * output handling, sandbox crash). Returns the tier-2 CaseResult.
+ */
+export async function runScenario(
+	opts: RunScenarioOptions,
+): Promise<CaseResult> {
+	const scenario = opts.scenario;
+	const evidenceDir = resolve(opts.outDir, opts.version, scenario.id);
+	mkdirSync(evidenceDir, { recursive: true });
+
+	const stub = await startStub({
+		script: scenario.script ?? [],
+		judgeReply: scenario.judgeReply,
+		recordFile: join(evidenceDir, "stub-requests.jsonl"),
+	});
+	// The shim lives inside the evidence dir (which is kept), not inside
+	// the sandbox root (which is deleted on dispose).
+	const shimDir = writeShim(evidenceDir, opts.serverEntry);
+	const { pre, post } = probePluginDirs();
+	const probeOut = join(evidenceDir, "probe-live.jsonl");
+	// Scenario options win over config options (shallow merge, SPEC 5.2).
+	const pluginOptions = {
+		...opts.config.plugin.options,
+		...scenario.plugin?.options,
+	};
+	const sandbox = new Sandbox({
+		opencodeBin: opts.opencodeBin,
+		stubUrl: stub.url,
+		plugins: [
+			{ package: pre, options: { out: probeOut, phase: "pre" } },
+			{ package: shimDir, options: pluginOptions },
+			{ package: post, options: { out: probeOut, phase: "post" } },
+		],
+		workspace: scenario.workspace,
+		logLevel: opts.logLevel ?? opts.config.logLevel,
+	});
+
+	let run: RunOutput | undefined;
+	try {
+		run = await sandbox.run(scenario.prompt, {
+			timeoutMs: scenario.timeoutMs,
+		});
+	} finally {
+		try {
+			if (existsSync(probeOut)) {
+				copyFileSync(probeOut, join(evidenceDir, "probe.jsonl"));
+			} else {
+				writeFileSync(join(evidenceDir, "probe.jsonl"), "");
+			}
+		} catch {
+			writeFileSync(join(evidenceDir, "probe.jsonl"), "");
+		}
+		writeFileSync(
+			join(evidenceDir, "events.jsonl"),
+			(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
+				(run?.events?.length ? "\n" : ""),
+		);
+		writeFileSync(join(evidenceDir, "stderr.log"), run?.stderr ?? "");
+		await stub.stop();
+	}
+	if (run === undefined) {
+		await sandbox.dispose();
+		throw new Error(`scenario ${scenario.id}: opencode run failed to start.`);
+	}
+
+	// Evaluate before dispose: file assertions read the sandbox project dir.
+	const failures: string[] = [];
+	const probe = readProbe(join(evidenceDir, "probe.jsonl"));
+	try {
+		if (run.timedOut) {
+			failures.push(`opencode run timed out after ${scenario.timeoutMs}ms.`);
+		}
+		failures.push(
+			...evaluate(scenario.expect, {
+				run,
+				probe,
+				stubRequests: stub.requests,
+				projectDir: sandbox.project,
+				mode: scenario.mode,
+			}),
+		);
+		if (stub.exhausted) {
+			failures.push(
+				"script exhausted: opencode made more model requests than the script has steps.",
+			);
+		}
+	} finally {
+		await sandbox.dispose();
+	}
+
+	const used = usage(run.events);
+	const text = textOf(run.events);
+	const calledTools = [
+		...new Set(probe.toolCalls("post").map((call) => call.tool)),
+	];
+	const stepCount = run.events.filter(
+		(e) => e.part?.type === "step-finish",
+	).length;
+	return {
+		id: scenario.id,
+		tier: "scripted",
+		opencode: opts.version,
+		pass: failures.length === 0,
+		description: scenario.description,
+		failures: failures.length > 0 ? failures : undefined,
+		tools: calledTools,
+		steps: stepCount,
+		costUSD: used.cost,
+		tokens: { input: used.input, output: used.output },
+		durationMs: run.durationMs,
+		textExcerpt: text.slice(0, 300),
+		kept: evidenceDir,
+	};
+}
+
+/** Concurrency for tier 2: min(4, CPUs), at least 1. */
+export function concurrencyLimit(): number {
+	try {
+		return Math.max(1, Math.min(4, availableParallelism()));
+	} catch {
+		return 4;
+	}
+}
+
+/**
+ * Run `fn` over `items` with at most `limit` in flight. Results keep input
+ * order. A rejection rejects the whole pool (callers decide per-item safety).
+ */
+export async function pool<T, R>(
+	items: readonly T[],
+	limit: number,
+	fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+	const results: R[] = new Array<R>(items.length);
+	let next = 0;
+	const workerCount = Math.max(1, Math.min(limit, items.length));
+	const workers: Promise<void>[] = [];
+	for (let w = 0; w < workerCount; w++) {
+		workers.push(
+			(async () => {
+				while (true) {
+					const current = next;
+					next += 1;
+					if (current >= items.length) {
+						return;
+					}
+					const item = items[current] as T;
+					results[current] = (await fn(item, current)) as R;
+				}
+			})(),
+		);
+	}
+	await Promise.all(workers);
+	return results;
+}
