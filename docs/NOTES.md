@@ -1,0 +1,104 @@
+# Spike notes (M2)
+
+Date: 2026-10-17. opencode: `opencode v2.0.26`
+(`review/oc/node_modules/.bin/opencode --version` prints `opencode v2.0.26`).
+
+Spike files (all under git-ignored `review/spike/`):
+
+- `plugins/a/server.ts` — plugin `spike-a`: adds tool `spike_echo`
+  (`input` JSON Schema `{type object, properties {text}, required [text]}`,
+  `execute` returns `{content: "echo:"+input.text}`); `execute.before` hook
+  appends `"+A"` to `input.text` when `i.tool` is `spike_echo`/`ns_spike_echo`.
+  `SPIKE_NS=1` additionally declares `editor.namespace({name:"ns",
+  description:"test"})` and adds the tool with `options:{namespace:"ns"}`.
+  Transform is idempotent via `editor.get(...)` guards.
+- `plugins/b/server.ts` — plugin `spike-b`: logs every `execute.before`
+  `{tool, input}` as a JSON line to `$SPIKE_LOG`; no-ops when unset.
+- `stub-llm.ts` — minimal OpenAI-compatible stub (`POST /v1/chat/completions`,
+  `GET /v1/models`), SSE + non-streaming JSON, scripted steps, records bodies.
+- `run.ts` — starts stub, writes sandbox config + project dir, spawns
+  `opencode run --standalone --auto --format json --print-logs --log-level info`
+  with async spawn + `stdio: ["ignore","pipe","pipe"]`, isolated `HOME`/`XDG_*`
+  dirs, `OPENCODE_DISABLE_AUTOUPDATE=1`, `OPENCODE_DISABLE_MODELS_FETCH=1`,
+  `TERM=dumb`. Parses stdout JSON lines; prints tool_use events, texts,
+  `$SPIKE_LOG` lines and catalog paths.
+
+## Step 4 — order [a, b] (hook mutation visible downstream)
+
+Command: `bun run.ts --order a,b --name run-a-b` (evidence: `review/spike/runs/run-a-b/`)
+
+- `tool_use` event for `execute`: `status=completed`,
+  `input={"code":"return await tools.spike_echo({text:\"hi\"})"}`,
+  `output="echo:hi+A"`. Inner calls:
+  `[{"tool":"spike_echo","status":"completed","input":{"text":"hi+A"}}]`.
+- `b` logged:
+  `{"tool":"execute","input":{"code":"return await tools.spike_echo({text:\"hi\"})"}}`
+  `{"tool":"spike_echo","input":{"text":"hi+A"}}`
+- `texts: ["done"]`, `errorEvents: 0`, exit 0, no `ERROR`/`FATAL` in stderr.
+
+## Step 5 — order [b, a] (hook order follows plugins array)
+
+Command: `bun run.ts --order b,a --name run-b-a` (evidence: `review/spike/runs/run-b-a/`)
+
+- Final output still `output="echo:hi+A"` (a mutates after b saw the input).
+- `b` logged: `{"tool":"spike_echo","input":{"text":"hi"}}` (unmutated).
+- Confirms IMPLEMENTATION_PROMPT §2.3: hooks run in config `plugins` order;
+  a later plugin sees an earlier plugin's mutations.
+
+## Step 6 — namespaced tool name forms
+
+Source (before running): `review/opencode/packages/core/src/tool.ts`
+`effectiveName = namespace.replaceAll(".","_") + "_" + normalizedName`;
+`editor.namespace()` only registers the namespace declaration for catalog
+display — the tool's name comes from `options.namespace` on `add`
+(the builtin opencode plugin sets both). First `--ns` attempt with only
+`namespace()` kept the catalog at `tools.spike_echo`; adding
+`options:{namespace:"ns"}` namespaced it.
+
+Command: `bun run.ts --order a,b --ns --name run-ns-call
+--code 'return await tools.ns.spike_echo({text:"hi"})'`
+(evidence: `review/spike/runs/run-ns-call/`; catalog captured in
+`review/spike/runs/run-ns-discover/stub-requests.jsonl`)
+
+Exact catalog block from the stub-recorded system text:
+
+```
+- ns (1 tool) // test
+  - tools.ns.spike_echo({
+  text: string,
+}): Promise<string | null> // Echo the input text back
+```
+
+(Non-namespaced form, for comparison: `- spike_echo (1 tool)` /
+`tools.spike_echo({...})` — matches IMPLEMENTATION_PROMPT §2.5.)
+
+Calling through the exact catalog path `tools.ns.spike_echo` works
+(`output="echo:hi+A"`). The same tool arrives under **three different
+spellings** depending on where you look:
+
+| Where | Value |
+|---|---|
+| Catalog call path (what the model sends) | `tools.ns.spike_echo` (dots) |
+| `execute` result `metadata.toolCalls[].tool` (stdout `tool_use` event) | `ns.spike_echo` (dots) |
+| `tool.hook("execute.before")` `i.tool` (probe/`$SPIKE_LOG`) | `ns_spike_echo` (effective name: `.`→`_`, `_`-joined) |
+
+`b` logged `{"tool":"ns_spike_echo","input":{"text":"hi+A"}}`, and a's hook
+matched on `ns_spike_echo` to apply the `+A` mutation. A wrong direct call
+(`tools.spike_echo`) fails with:
+`Unknown tool 'spike_echo'. Did you mean tools.ns.spike_echo?`
+
+## Discrepancies / notes vs IMPLEMENTATION_PROMPT §2
+
+- §2.6 asked how a namespaced tool's name appears in hooks: answer is the
+  **effective name** `ns_spike_echo` (underscores), while the catalog and
+  `metadata.toolCalls` use dots (`tools.ns.spike_echo` / `ns.spike_echo`).
+  Assertion code must normalize between these forms.
+- §2.4 API shapes all confirmed as written (`editor.namespace({name,
+  description})` exists; `tool.transform` callback is sync, registration
+  itself awaited; hooks receive mutable `input`/`tool` in before).
+- `allowScripts` note (env setup, not opencode): current npm blocks
+  `@opencode/cli` postinstall by default; `npm install-scripts approve
+  @opencode/cli` (run inside `review/oc` with its own `package.json`) was
+  needed before `./node_modules/.bin/opencode` appeared. The repo-root
+  `package.json` picked up a transient `allowScripts` edit during the first
+  attempt; it was reverted (`git status` clean except this file).
