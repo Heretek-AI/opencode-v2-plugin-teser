@@ -61,6 +61,10 @@ const gateConfigSchema = z
 		threshold: z.number().min(0).max(1).default(0.9),
 		bootstrap: z.enum(["fail", "allow"]).default("fail"),
 		workflow: z.string().min(1).optional(),
+		// Artifact name the gate downloads history from. Must match the
+		// `artifact-name` input of the GitHub Action (M13); matrix users
+		// set a distinct name per leg here and there.
+		artifact: z.string().min(1).default("opencode-plugin-ci-results"),
 	})
 	.strict();
 

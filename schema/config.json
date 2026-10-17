@@ -213,13 +213,19 @@
         "workflow": {
           "type": "string",
           "minLength": 1
+        },
+        "artifact": {
+          "default": "opencode-plugin-ci-results",
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
         "enabled",
         "window",
         "threshold",
-        "bootstrap"
+        "bootstrap",
+        "artifact"
       ],
       "additionalProperties": false
     },

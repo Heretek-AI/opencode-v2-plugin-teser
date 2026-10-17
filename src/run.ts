@@ -8,13 +8,15 @@
 // 5. Run `.opencode-ci/**/*.test.ts` once via `bun test` (programmatic API
 //    escape hatch) and fold it in as a `bun-test` scripted case.
 // 6. Write results.json + report.md (+ $GITHUB_STEP_SUMMARY).
-// 7. Gate (M12; the --gate flag is accepted but warns for now).
+// 7. Flake gate (live tier only): when it applies, required-version live
+//    failures are decided by the gate; tiers 1 and 2 always fail directly.
 // 8. Exit code: 0 when all required cases pass or skip, 1 on a required
 //    failure. Results on non-first versions are allowed failures.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { loadAll } from "./config/load.ts";
 import type { Config, Scenario } from "./config/schema.ts";
+import { runGate } from "./gate/gate.ts";
 import { resolveOpencode } from "./opencode/binary.ts";
 import { type Entries, ensureEntriesOrThrow } from "./plugin/entry.ts";
 import { runStep } from "./plugin/install.ts";
@@ -31,6 +33,7 @@ import {
 import { runLoad } from "./tiers/load.ts";
 import { concurrencyLimit, pool, runScenario } from "./tiers/scripted.ts";
 import { runUiStatic } from "./tiers/ui-static.ts";
+import { appendFile, ensureDir } from "./util/fs.ts";
 import { createLogger, type Logger } from "./util/log.ts";
 
 export type TierName = "load" | "scripted" | "live";
@@ -431,10 +434,7 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 	};
 	const resultsPath = join(outDir, "results.json");
 	const reportPath = join(outDir, "report.md");
-	{
-		const { ensureDir } = await import("./util/fs.ts");
-		ensureDir(outDir);
-	}
+	ensureDir(outDir);
 	writeFileSync(
 		resultsPath,
 		`${JSON.stringify(resultsFile, null, 2)}\n`,
@@ -447,20 +447,51 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		`Wrote ${relative(cwd, resultsPath)} and ${relative(cwd, reportPath)}.`,
 	);
 
-	// 7. Gate (M12): accepted but not implemented yet.
-	if (opts?.gate === true) {
-		logger.warn(
-			"The --gate flag is accepted but the flake gate lands in M12; continuing without gating.",
+	// 7. Gate: when it applies, required-version live failures are decided
+	// by the gate instead of failing directly. Tiers 1 and 2 always fail.
+	const gateOutcome = await runGate({
+		cwd,
+		config,
+		results,
+		requiredVersion: required,
+		gateFlag: opts?.gate === true,
+		logger,
+	});
+	if (gateOutcome.ran) {
+		appendFile(reportPath, gateOutcome.section);
+		appendStepSummary(gateOutcome.section);
+		logger.info(
+			`Flake gate: exit ${gateOutcome.verdict?.exit ?? "unknown"} (exit ${gateOutcome.exitCode}).`,
 		);
 	}
 
-	// 8. Exit code: required-version failures fail; allowed versions and
-	// skips never do.
-	const requiredFailures = results.filter(
-		(r) => r.opencode === required && !r.pass && r.skipped === undefined,
+	// 8. Exit code: required-version non-live failures always fail; live
+	// failures fail unless the gate ran and tolerated them. Allowed
+	// versions and skips never fail.
+	const nonLiveFailures = results.filter(
+		(r) =>
+			r.opencode === required &&
+			!r.pass &&
+			r.skipped === undefined &&
+			r.tier !== "live",
 	);
+	const liveFailures = results.filter(
+		(r) =>
+			r.opencode === required &&
+			!r.pass &&
+			r.skipped === undefined &&
+			r.tier === "live",
+	);
+	let exitCode: number;
+	if (nonLiveFailures.length > 0) {
+		exitCode = 1;
+	} else if (gateOutcome.ran) {
+		exitCode = gateOutcome.exitCode;
+	} else {
+		exitCode = liveFailures.length > 0 ? 1 : 0;
+	}
 	return {
-		exitCode: requiredFailures.length > 0 ? 1 : 0,
+		exitCode,
 		resultsFile,
 		resultsPath,
 		reportPath,

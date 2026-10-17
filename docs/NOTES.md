@@ -186,3 +186,53 @@ line, e.g. `opencode-go/gpt-5.6-luna`, `opencode/claude-sonnet-5-5`.
 preferring `opencode-go/` then `opencode/`, and defaults to the first
 `opencode/` line (logged) when no model is configured. Malformed lines
 (any whitespace-free non-`a/b` shape) are ignored; a non-zero exit throws.
+
+# M12 cycle 2 notes (2026-10-17): verbatim IUMBTEMS port
+
+The `review/IUMBTEMS` clone is now available, so `src/gate/verdict.ts` was
+replaced with a verbatim copy of
+`review/IUMBTEMS/packages/core/src/evals/gate.ts` (5-line Apache header
+added; `diff` of the remaining 183 lines is empty), `src/gate/exit.ts` is a
+verbatim copy of `packages/core/src/evals/exit.ts` (needed by the ported
+tests' `decideEvalsExit` import), and `test/unit/gate-verdict.test.ts` is a
+verbatim copy of `packages/core/test/evals-gate.test.ts` with only the two
+import paths re-pointed (`diff` shows exactly those 2 lines).
+`src/gate/history.ts` and `src/gate/gate.ts` were reconciled to the verbatim
+API (call sites adapted, verbatim file untouched).
+`review/IUMBTEMS/scripts/e2e-gate.ts` was used as the history reference
+(tally, conclusion filter, fail-closed acks, exit codes).
+
+## Adaptations (minimal, rule 5)
+
+- Import paths in the test copy only (see above). The verdict/exit sources
+  have no imports, so nothing else needed changing.
+- `biome.json` excludes the three verbatim files from `biome check` (same
+  `!`-pattern mechanism already used for `review/`, `schema/`); they keep
+  upstream's 2-space style. `tsc` still covers them.
+- `src/gate/exit.ts` is a new file because the ported tests import
+  `decideEvalsExit` from it; it is listed in NOTICE.
+
+## Known gaps / discrepancies vs SPEC and M12 (rule 5)
+
+- Absent acknowledgments file defaults to `{version:1,acknowledgments:[]}`
+  in the `gate.ts` wrapper (unchanged from cycle 1). Upstream `e2e-gate.ts`
+  fails when the file is absent; SPEC/M12 explicitly requires the default,
+  so the spec wins and the verbatim file is untouched.
+- The verbatim `parseAcknowledgments` requires non-empty `case`, `reason`,
+  `issue` and a parseable `date` on every entry. This matches SPEC 7.2,
+  which lists all four fields. The cycle-1 re-implementation had allowed
+  `issue`/`date` to be omitted; that leniency is gone. One `gate.test.ts`
+  case was updated to full entries, plus a new case pinning the strictness.
+- Stability constants are now upstream's (>= 5 samples, >= 90% pass) instead
+  of `gate.window`/`gate.threshold`. The config fields keep their defaults
+  (5 / 0.9), so default behavior is identical; a custom window/threshold no
+  longer takes effect (documented here rather than silently worked around).
+- Verdict shape is now upstream's `{exit, message}` instead of
+  `{status, reasons, failing}`; the `run.ts` log line and
+  `formatGateSection` were adapted. Exit mapping is unchanged (0 green,
+  1 regression, 2 no-history; bootstrap-allow turns 2 into 0 with a
+  warning).
+- `fetchHistory` now returns `GateHistoryRun[]` (the verbatim input type,
+  with real `createdAt` timestamps so date-bound acknowledgments work)
+  instead of row arrays, and skips runs whose conclusion is not
+  success/failure (mirroring `e2e-gate.ts`).
