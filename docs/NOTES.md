@@ -134,3 +134,55 @@ Answer: **no** (with the pinned binary). Evidence from a kept sandbox
 - The provider package resolves from inside the opencode binary itself, so
   an isolated `XDG_CACHE_HOME` per sandbox costs nothing. No shared cache
   needed for speed; per-run temp dirs stay fast (~1.2s per `run()`).
+
+# M11 notes (2026-10-17): live tier, judge, budget
+
+Files: `src/tiers/judge.ts`, `src/tiers/live.ts`, wired into `src/run.ts`
+(sequential tier 3 with a shared run-wide budget); tests
+`test/unit/judge.test.ts`, `test/unit/live.test.ts`,
+`test/e2e/judge.test.ts`. `bun run check` green (178 unit tests pass);
+e2e judge-via-stub: 3 pass in ~3.7s wall (`OPENCODE_BIN=review/oc/...`).
+
+## Judge prompt shape
+
+`buildJudgePrompt` first line is exactly `OPENCODE_PLUGIN_CI_JUDGE` (the
+`JUDGE_SENTINEL` constant, so the stub classifies the request as `judge`
+even though the tool-less request would otherwise look like a title
+request), then `Rubric:`, then non-empty evidence sections each clipped to
+8000 chars, then the exact reply-contract line. `parseVerdict` takes the
+first balanced `{...}` block (string-aware scan), requires boolean `pass`
++ string `reason`; anything else is
+`judge reply was not valid JSON: <first 200 chars>`. Verified by unit
+tests, including `pass: "true"` (string) rejected and prose `{this}`
+before the JSON winning as the first block (spec: first block wins).
+
+## Live run result: no key available
+
+No `OPENCODE_API_KEY` (or any other live key) is set in this environment,
+so the live tier was exercised through its skip path only -- no real model
+was called and nothing is faked:
+
+- `runLiveScenario` unit tests: no-key and budget-exhausted skips return
+  before any spawn (binary paths point at `/nonexistent/...` to prove it).
+- Manual CLI check: temp copy of the `tool-basic` fixture plus a live
+  scenario (`live-smoke`: "Use the echo tool on the word hi and show me
+  its output", expecting `tools: [{ name: echo_tool }]`),
+  `bun bin/opencode-plugin-ci.ts run --tier live` with `OPENCODE_BIN`
+  pointing at `review/oc` exits 0 and records
+  `skipped: "no API key (set one of: OPENCODE_API_KEY)"` in results.json.
+- `resolveModel` passthrough (`provider/model` used as is) is unit-tested.
+  The `opencode models` listing path was probed manually: bare
+  `opencode models` (2.0.26) prints one `provider/model` per line
+  (`opencode-go/...`, `opencode/...`, plus third-party providers), which is
+  what `resolveModel` parses; the bare-id and default-model branches have
+  not run against a live key yet.
+
+## `opencode models` observation (for `resolveModel`)
+
+`opencode models` works with no config and no keys, printing one id per
+line, e.g. `opencode-go/gpt-5.6-luna`, `opencode/claude-sonnet-5-5`.
+`resolveModel` therefore spawns `<bin> models` with the live keys in env
+(keys may widen the list), matches a bare id as a `/<id>` suffix
+preferring `opencode-go/` then `opencode/`, and defaults to the first
+`opencode/` line (logged) when no model is configured. Malformed lines
+(any whitespace-free non-`a/b` shape) are ignored; a non-zero exit throws.

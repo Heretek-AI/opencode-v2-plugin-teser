@@ -52,3 +52,28 @@ export type {
 	ToolCall,
 } from "./stub/stub.ts";
 export { EXHAUSTED, JUDGE_SENTINEL, startStub } from "./stub/stub.ts";
+export type {
+	JudgeEvidenceSections,
+	JudgeOutcome,
+	RunJudgeOptions,
+	Verdict,
+} from "./tiers/judge.ts";
+export {
+	buildJudgePrompt,
+	JUDGE_AGENT,
+	JUDGE_SYSTEM,
+	parseVerdict,
+	runJudge,
+} from "./tiers/judge.ts";
+export type {
+	LiveBudget,
+	ResolveModelOptions,
+	RunLiveScenarioOptions,
+} from "./tiers/live.ts";
+export {
+	budgetExhaustedReason,
+	collectLiveKeys,
+	noKeySkipReason,
+	resolveModel,
+	runLiveScenario,
+} from "./tiers/live.ts";

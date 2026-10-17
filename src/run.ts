@@ -3,8 +3,8 @@
 // 2. Resolve entries (exit 2 when neither server nor TUI exists).
 // 3. Run plugin.install / plugin.build once.
 // 4. For each opencode version: resolve binary, tier 1 (or static tier 1
-//    for TUI-only plugins), then tier 2; tier 3 live scenarios are marked
-//    skipped until M11 implements the live tier.
+//    for TUI-only plugins), then tier 2 (scripted), then tier 3 (live,
+//    sequential with a shared run-wide budget).
 // 5. Run `.opencode-ci/**/*.test.ts` once via `bun test` (programmatic API
 //    escape hatch) and fold it in as a `bun-test` scripted case.
 // 6. Write results.json + report.md (+ $GITHUB_STEP_SUMMARY).
@@ -20,6 +20,14 @@ import { type Entries, ensureEntriesOrThrow } from "./plugin/entry.ts";
 import { runStep } from "./plugin/install.ts";
 import { appendStepSummary, renderMarkdown } from "./report/markdown.ts";
 import type { CaseResult, ResultsFile } from "./report/results.ts";
+import {
+	budgetExhaustedReason,
+	collectLiveKeys,
+	type LiveBudget,
+	noKeySkipReason,
+	resolveModel,
+	runLiveScenario,
+} from "./tiers/live.ts";
 import { runLoad } from "./tiers/load.ts";
 import { concurrencyLimit, pool, runScenario } from "./tiers/scripted.ts";
 import { runUiStatic } from "./tiers/ui-static.ts";
@@ -114,23 +122,6 @@ function findProgrammaticTests(cwd: string): string[] {
 	};
 	walk(root);
 	return out;
-}
-
-/** M10 placeholder for the live tier: every live scenario is skipped. */
-function skippedLive(
-	scenario: Scenario,
-	version: string,
-	reason: string,
-): CaseResult {
-	return {
-		id: scenario.id,
-		tier: "live",
-		opencode: version,
-		pass: true,
-		skipped: reason,
-		description: scenario.description,
-		durationMs: 0,
-	};
 }
 
 function skippedForTier1(scenario: Scenario, version: string): CaseResult {
@@ -299,12 +290,89 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		}
 
 		if (runLive) {
-			// M11 implements the live tier; until then every live scenario
-			// is reported skipped (never failed) so forks stay green.
-			for (const scenario of live) {
-				results.push(
-					skippedLive(scenario, version, "live tier not implemented (M11)"),
-				);
+			// Tier 3 runs sequentially: attempts share one run-wide budget
+			// counter, so parallel runs would race the accounting.
+			const pending = live;
+			if (pending.length > 0) {
+				const budget: LiveBudget = { spent: 0, limit: config.live.budgetUSD };
+				const keys = collectLiveKeys(config);
+				if (Object.keys(keys).length === 0) {
+					const reason = noKeySkipReason(config);
+					logger.info(`[${version}] tier 3: ${reason}.`);
+					for (const scenario of pending) {
+						results.push({
+							id: scenario.id,
+							tier: "live",
+							opencode: version,
+							pass: true,
+							skipped: reason,
+							description: scenario.description,
+							durationMs: 0,
+						});
+					}
+				} else {
+					let model: string | undefined;
+					try {
+						model = await resolveModel({
+							opencodeBin: bin,
+							keys,
+							preferred: config.live.model,
+							log: (message) => logger.info(message),
+						});
+						logger.info(`[${version}] tier 3 live model: ${model}.`);
+					} catch (error) {
+						const message =
+							error instanceof Error ? error.message : String(error);
+						logger.warn(
+							`[${version}] tier 3 model resolution failed: ${message}`,
+						);
+						for (const scenario of pending) {
+							results.push({
+								id: scenario.id,
+								tier: "live",
+								opencode: version,
+								pass: false,
+								description: scenario.description,
+								failures: [`could not resolve live model: ${message}`],
+								durationMs: 0,
+							});
+						}
+					}
+					if (model !== undefined) {
+						logger.info(
+							`[${version}] tier 3: ${pending.length} live scenario(s), budget $${budget.limit.toFixed(2)}...`,
+						);
+						for (const scenario of pending) {
+							if (budget.spent >= budget.limit) {
+								results.push({
+									id: scenario.id,
+									tier: "live",
+									opencode: version,
+									pass: true,
+									skipped: budgetExhaustedReason(budget),
+									description: scenario.description,
+									durationMs: 0,
+								});
+								continue;
+							}
+							results.push(
+								await runLiveScenario({
+									scenario,
+									config,
+									pluginPath,
+									serverEntry: entries.server as string,
+									opencodeBin: bin,
+									outDir,
+									version,
+									logLevel,
+									budget,
+									model,
+									keys,
+								}),
+							);
+						}
+					}
+				}
 			}
 		}
 	}
