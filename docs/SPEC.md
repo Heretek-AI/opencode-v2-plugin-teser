@@ -46,6 +46,21 @@ There is no `ctx.tool.register`, `ctx.shell.env` or `ctx.subscribe`. Some earlie
 
 **Prior art.** `Heretek-AI/claude-4-opencode/e2e` provides the isolated sandbox (`lib/sandbox.ts`), the scripted OpenAI-compatible stub model (`lib/stub-llm.ts`) and the live-tier pattern (`live/live.test.ts`). `Heretek-AI/IUMBTEMS/scripts/e2e-report.ts` and `e2e-gate.ts` provide reporting and the historical flake gate. This tool extracts and generalizes them; it does not depend on either repo.
 
+**Spike results (2026-10-17, opencode 2.0.26).** These were confirmed by running throwaway plugins against the stub model. They supersede anything earlier in this document that disagrees.
+
+| Question | Answer |
+|---|---|
+| Can a plugin path be a file? | No. A configured local plugin must be a **directory**; a file logs `WARN configured plugin path must be a directory` and is skipped |
+| Which file in the directory is loaded? | `<dir>/server.{ts,js}`, else `<dir>/index.{ts,js}`. `package.json` `main`/`exports` are **ignored** for local paths. A directory with neither is **silently skipped**, with no log line. A `<dir>/tui.{ts,js}` is the TUI entry, and a directory with only a TUI entry never reaches the server |
+| Do hooks from several plugins run in a fixed order? | Yes: in the order of the config `plugins` array, for `tool.hook`, `shell.hook` and `session.hook`. A later plugin sees an earlier plugin's mutations |
+| What does `ctx.plugin.list()` return? | `{ location, data: [{ id, source: { type: "local", path }, features: { server }, state: { status: "active" \| "failed", error? } }] }`. A plugin whose `setup` throws is `failed` with the stack in `error`, and the server logs `WARN failed to load plugin plugin.id=<id>`. Other plugins keep working |
+| Are plugin tools offered to the model directly? | **No, not by default.** Tools added with `ctx.tool.transform` default to Code Mode. They are listed in a catalog inside the system prompt and called through the built-in `execute` tool with `{ code: "return await tools.<name>(input)" }`. Setting `options: { codemode: false }` on the tool makes it a direct tool |
+| Does `--format json` show Code Mode inner calls? | No. It shows one `tool_use` event for `execute`. The inner call is visible to `tool.hook("execute.before"/"execute.after")` with `tool` set to the inner tool's name, and in the `execute` result's `metadata.toolCalls` |
+| What is the built-in shell tool called? | `shell` (not `bash`), with input `{ command, description }` |
+| How do you subscribe to events? | `ctx.event.subscribe()` returns an `AsyncIterable` of `{ type, ... }` (for example `session.tool.called`, `session.tool.success`, `session.step.ended`). It is not a callback |
+| How do you deny every tool for the judge? | Define an agent in config with `permissions: [{ action: "*", resource: "*", effect: "deny" }]` and run with `--agent <name>`. The model request then carries no tools at all |
+| How do you get clean logs offline? | `OPENCODE_DISABLE_MODELS_FETCH=1` stops the `ERROR Failed to fetch models.dev` line |
+
 **Ecosystem.** `Heretek-AI/awesome-opencode` lists 154 plugins with `compat: v2`. That flag means "depends on `@opencode/*`", detected statically, not "verified working". Eighteen of them are primarily provider plugins.
 
 ## 3. Architecture
@@ -68,14 +83,17 @@ Assertions → results.json → Markdown report (+ flake gate for live runs)
 
 ### 3.1 Sandbox
 
-Same design as `claude-4-opencode/e2e/lib/sandbox.ts`. Every scenario gets a fresh temp root with its own `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME`, plus an empty `GIT_CONFIG_GLOBAL`, `OPENCODE_DISABLE_AUTOUPDATE=1` and `TERM=dumb`. The project dir is a fresh `git init` with files from the scenario's `workspace` block. The config is written to `$XDG_CONFIG_HOME/opencode/opencode.jsonc` with `update: "disable"`, `share: "disabled"`, the model, the providers and:
+Same design as `claude-4-opencode/e2e/lib/sandbox.ts`. Every scenario gets a fresh temp root with its own `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME`, plus an empty `GIT_CONFIG_GLOBAL`, `OPENCODE_DISABLE_AUTOUPDATE=1`, `OPENCODE_DISABLE_MODELS_FETCH=1` and `TERM=dumb`. The project dir is a fresh `git init` with files from the scenario's `workspace` block. The config is written to `$XDG_CONFIG_HOME/opencode/opencode.jsonc` with `update: "disable"`, `share: "disabled"`, the model, the providers and:
 
 ```jsonc
 "plugins": [
-  { "package": "<checkout>/<plugin.path>", "options": { /* scenario plugin options */ } },
-  { "package": "<tool>/probe", "options": { "out": "<root>/probe.jsonl" } }
+  { "package": "<tool>/probe/pre",  "options": { "out": "<root>/probe.jsonl", "phase": "pre" } },
+  { "package": "<root>/plugin-under-test", "options": { /* scenario plugin options */ } },
+  { "package": "<tool>/probe/post", "options": { "out": "<root>/probe.jsonl", "phase": "post" } }
 ]
 ```
+
+Order matters: hooks run in this order. The pre-probe records what the plugin under test received, and the post-probe records what it produced.
 
 Nothing touches the user's real opencode setup. `--keep` (or `OPENCODE_PLUGIN_CI_KEEP=1`) keeps the sandbox for debugging.
 
@@ -83,20 +101,36 @@ Nothing touches the user's real opencode setup. `--keep` (or `OPENCODE_PLUGIN_CI
 
 The plugin loads from the checkout being tested, as a local path, after the author's own `install` and `build` commands run. npm is never used, so a PR is tested before anything is published.
 
+opencode only loads `<dir>/server.*` or `<dir>/index.*` from a local directory, but real plugins usually point `package.json` at a build output. So the harness writes a one-line **shim** directory, `<root>/plugin-under-test/server.js`, containing `export { default } from "<absolute server entry>"`. The server entry is resolved in this order:
+
+1. `plugin.entry` in config (relative to `plugin.path`),
+2. `package.json` `exports["./server"]`, then `exports["."]` (a string, or the `import` or `default` condition),
+3. `package.json` `main`,
+4. `<plugin.path>/server.{ts,js,mjs}`, then `<plugin.path>/index.{ts,js,mjs}`.
+
+The TUI entry is resolved the same way from `exports["./tui"]` or `<plugin.path>/tui.{ts,js,mjs}`. A plugin with a TUI entry and no server entry is TUI-only. A plugin with neither is a configuration error (exit 2). The shim keeps the real file in the checkout, so the plugin's own `node_modules` still resolve.
+
 ### 3.3 Probe plugin
 
-This is a small v2 plugin shipped inside this tool and loaded after the plugin under test. It writes one JSON line per observation to `probe.jsonl`.
+This is a small v2 plugin shipped inside this tool as two entry directories, `probe/pre` and `probe/post`, that share one implementation and have distinct ids. It is loaded before and after the plugin under test. Each instance writes one JSON line per observation, tagged with its `phase`, to `probe.jsonl`.
 
 - **Inventory**: on the first `session` `prompt` hook (by then every plugin has activated), it records `ctx.plugin.list()`, `ctx.tool.list()`, `ctx.agent`, `ctx.command.list()`, `ctx.skill` and `ctx.mcp` lists.
 - **Hooks**: it registers `tool.hook("execute.before")`, `tool.hook("execute.after")`, `shell.hook("create.before")` and the `session` hooks `prompt`, `context`, `model.request`, then records the payload it sees. Large fields are truncated, and values of env keys matching `/KEY|TOKEN|SECRET|PASSWORD/i` are redacted.
-- **Events**: it subscribes to `ctx.event` and records event types.
+- **Events**: it iterates `ctx.event.subscribe()` in a background loop (not awaited in `setup`) and records event types.
 - **Load errors**: it records plugin load failures that `ctx.plugin.list()` exposes.
 
-Because the probe registers after the plugin under test, its hook payloads should show the plugin's mutations. **Hook ordering across plugins is not documented**, so the first implementation task is a spike that confirms registration order equals execution order on 2.0.26. If it does not, the probe instead diffs the stub model's recorded request against the scenario's expectation, and hook assertions fall back to `stub-requests.jsonl`.
+Hook order follows the config `plugins` array (confirmed by the spike), so `post` records show the plugin's mutations and `pre` records show its inputs.
+
+**Tool-call assertions use the probe, not the event stream.** Plugin tools usually run inside Code Mode, so `--format json` only shows an `execute` call. `tool.hook` sees every call, direct or inner, under the real tool name.
 
 ### 3.4 Stub model
 
 This is the `stub-llm.ts` pattern: an OpenAI-compatible `/v1/chat/completions` server on `127.0.0.1:0`, configured as provider `stub` through `@ai-sdk/openai-compatible`. Requests that offer tools are agent-loop requests, and each one consumes the next scripted step (`text` or `toolCalls`). Other requests (titles) get a fixed reply. Every request is recorded to `stub-requests.jsonl`. A script that runs out returns `STUB_SCRIPT_EXHAUSTED`, which fails the scenario.
+
+Two additions to the original stub:
+
+- **Code Mode auto-wrap.** When a scripted tool call names a tool that the request does not offer directly but `execute` is offered, the stub rewrites it into an `execute` call. It finds the tool's exact call path (for example `tools.my_tool` or `tools.ns["my-tool"]`) in the Code Mode catalog in the request's system text, and sends `{ code: "return await <path>(<json args>)" }`. A step can opt out with `raw: true`.
+- **Judge requests.** The judge prompt carries the sentinel `OPENCODE_PLUGIN_CI_JUDGE`. A request containing it is answered with the scenario's scripted `judgeReply`, so the judge path is testable offline. A tool-less request would otherwise be mistaken for a title request.
 
 ## 4. Tiers
 
@@ -109,11 +143,11 @@ This is the `stub-llm.ts` pattern: an OpenAI-compatible `/v1/chat/completions` s
 **Tier 1, load.** This tier needs no authoring. For each opencode version in the matrix it runs one `opencode run` turn with a stub step `{ text: "ok" }` and asserts:
 
 - exit code 0 and no `error` event,
-- the plugin under test is in the probe's `plugin.list()` with no load error,
-- no stderr log line at level `error` or `fatal` that names the plugin id,
+- the plugin under test is in the probe's `plugin.list()`, matched by `source.path` equal to the shim's `server.js`, with `state.status: "active"`. A missing entry means the entry was never found; a `failed` entry is reported with its `state.error`,
+- no stderr line at level `ERROR` or `FATAL` that names the plugin id or path, and no `failed to load plugin` line for it,
 - every contribution declared in `.opencode-ci/config.yaml` `expect` (tools, agents, commands, skills, mcp) appears in the inventory.
 
-TUI-only plugins stop here.
+TUI-only plugins never reach the server, so they get a **static** tier 1 instead. A child `bun` process imports the TUI entry from the checkout and asserts that the default export has a string `id` and a function `setup`. They then stop.
 
 **Tier 2, scripted.** This tier runs scenarios with `mode: scripted`: the stub plays the model, so tool calls are deterministic and the run tests the plugin, not a model.
 
@@ -166,26 +200,27 @@ workspace:                   # files written into the project dir before the run
 prompt: "print the env file"
 script:                      # scripted only: one step per agent-loop request
   - toolCalls:
-      - name: bash
+      - name: shell
         arguments: { command: "cat .env", description: "show env" }
   - text: done
 timeoutMs: 120000
 expect:
   exitCode: 0
-  tools:                     # from tool_use events
-    - name: bash
+  tools:                     # from probe tool.hook records (sees Code Mode inner calls)
+    - name: shell
       status: completed
   noTools: [webfetch]
   hooks:                     # from probe.jsonl
     - hook: tool.execute.before
-      tool: bash
+      phase: post              # pre = what the plugin received, post = after its mutation
+      tool: shell
       input: { command: { notContains: "sk-test" } }
     - hook: shell.create.before
       env: { MY_PLUGIN_ACTIVE: { equals: "1" } }
   request:                   # scripted only, from stub-requests.jsonl
     nth: 1
     system: { contains: "Never print secrets" }
-    tools: { includes: [my_tool] }
+    tools: { includes: [my_tool] }   # offered directly or listed in the Code Mode catalog
   files:                     # project dir after the run
     - path: .my-plugin/log.jsonl
       exists: true
@@ -236,7 +271,7 @@ Every scenario writes `<out>/<version>/<scenario>/` with `events.jsonl`, `probe.
 
 The judge is the user's original two-agent idea, scoped so that it cannot skip evidence. It runs only for live scenarios that define `judge.rubric`, and only after deterministic assertions pass.
 
-- It is a second `opencode run --standalone --format json` in a fresh sandbox with **no plugins** and all tools denied via the permission config (the exact config key is confirmed in the step-1 spike). It uses the same model unless `judge.model` is set.
+- It is a second `opencode run --standalone --format json --agent opencode-plugin-ci-judge` in a fresh sandbox with **no plugins**. The config defines that agent with `permissions: [{ action: "*", resource: "*", effect: "deny" }]`, which the spike confirmed sends a request with no tools. It uses the same model unless `judge.model` is set.
 - Its prompt contains the rubric and the evidence: the run's text, `tool_use` events, probe hook log (truncated) and any `files` the scenario names. It never sees the plugin's source.
 - It must reply with one JSON object `{"pass": boolean, "reason": string}`. Any other reply counts as a failed judgement.
 - Judge tokens count toward `live.budgetUSD`.
@@ -316,7 +351,7 @@ The docs must state plainly: never run this on `pull_request_target` with the PR
 
 ## 10. Implementation order
 
-1. Spike: confirm cross-plugin hook execution order, the `ctx.plugin.list()` load-error shape and the permission config that denies all tools, on 2.0.26 (3.3, 6.3).
+1. ~~Spike~~ done 2026-10-17; the results are in section 2.
 2. Sandbox, stub and probe, extracted from `claude-4-opencode/e2e/lib`.
 3. Tier 1 and the CLI `run`, `validate` and `init` commands.
 4. Scenario schema and tier 2 assertions.
@@ -340,3 +375,5 @@ The docs must state plainly: never run this on `pull_request_target` with the PR
 | 9 | The judge is a plugin-free, tool-less second `opencode run` that returns a JSON verdict over recorded evidence, only for live scenarios with a rubric |
 | 10 | Live scenarios pass on k of n attempts (default 2 of 3) under a USD budget; a missing key means `skipped`, not failed |
 | 11 | The default opencode matrix is a pinned version (required) plus `latest` (allowed to fail) |
+| 12 | The plugin under test is loaded through a generated shim directory, because opencode ignores `package.json` for local plugin paths |
+| 13 | The probe runs twice (`pre` and `post`) around the plugin under test, and tool assertions come from its hook records rather than `tool_use` events, because of Code Mode |
