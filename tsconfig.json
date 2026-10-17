@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"target": "ESNext",
+		"types": ["bun"],
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true
+	},
+	"include": ["src", "bin", "test", "scripts"],
+	"exclude": ["review", "probe", "test/fixtures", "node_modules"]
+}
