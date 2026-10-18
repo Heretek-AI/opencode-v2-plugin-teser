@@ -48,8 +48,10 @@ describe("ConfigSchema defaults", () => {
 
 	test("versions accepts semver and latest, non-empty only", () => {
 		expect(
-			ConfigSchema.parse({ opencode: { versions: ["2.0.26", "latest"] } })
-				.opencode.versions,
+			ConfigSchema.parse({
+				opencode: { versions: ["2.0.26", "latest"] },
+				gate: { artifact: "matrix-results" },
+			}).opencode.versions,
 		).toEqual(["2.0.26", "latest"]);
 		expect(ConfigSchema.safeParse({ opencode: { versions: [] } }).success).toBe(
 			false,

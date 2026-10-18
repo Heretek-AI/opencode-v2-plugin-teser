@@ -552,3 +552,124 @@ statement not listed under "Known gaps" below was confirmed in code.
 - Carried from M12: custom `gate.window`/`gate.threshold` no longer take
   effect (verbatim upstream verdict hard-codes >= 5 samples, >= 90%);
   defaults (5 / 0.9) keep default behavior identical.
+
+# Audit P2/P3 remediation (2026-10-18)
+
+Implements the P2 and P3 Remediation lines of `AUDIT_REPORT_FINDINGS.md`
+verbatim (P1 was the three prior `audit P1:` commits on this branch).
+P3 items need no behavior change except where noted.
+
+## P2
+
+- OCI-3.3-meta (`probe/core.js` metadata-last): no test crafted a payload
+  with colliding `kind`/`phase` keys, so a payload-wins sabotage stayed
+  green. Added `test/unit/probe-meta.test.ts` importing `makeProbe` and the
+  new `writeRecord` seam (the single spread site; `write` delegates to it),
+  writing a record whose data contains
+  `{kind:"forged",phase:"forged",seq:999}` and asserting the parsed line
+  keeps `kind`/`phase`/`seq` from metadata. Verified the swap sabotage
+  (metadata-first spread in `writeRecord`) goes red. Public probe handlers
+  build fixed-shape data objects, so a collision is reachable only through
+  this seam — the ordering is defense-in-depth, now pinned.
+- OCI-4.3-order (`src/tiers/load.ts:88-92`): the tier-1 `[pre,plugin,post]`
+  order was unpinned while the scripted copy is pinned by
+  `hook-mutate-pass`. Extracted `buildLoadPlugins(pre, shimDir, post, ...)`
+  called by `runLoad`, pinned by `test/unit/load-order.test.ts` (package
+  order plus a `runLoad`-calls-the-constructor shape check). A `runLoad`-level
+  hook-order e2e is inapplicable: tier 1 runs one `{"text":"ok"}` stub turn
+  with no tool calls, so tier-1 `probe.jsonl` holds no hook records to
+  compare. Swap sabotage (`[post, shim, pre]` in the helper) goes red.
+- OCI-2.5-noerrors (`src/assert/expect.ts:381` `?? true`): added
+  `test/unit/noerrors.test.ts` — `evaluate` with `noErrors` deleted (the
+  fallback path) on evidence with an `error` event must contain `error
+  event`; explicit `noErrors: false` still passes; clean runs pass. Prod
+  default stays schema-pinned (`noErrors: true` in `scenarioExpectSchema`);
+  no prod change, fallback pinned only. No scripted e2e fixture added: no
+  stub turn emits `error` events on a passing path, so the unit pin is the
+  whole coverage.
+- OCI-1.4-cap (`probe/core.js:15-17` 200-item cap): `clip` now takes
+  `capArrays`; `writeRecord` passes `false` for `kind === "inventory"`, so
+  inventory membership lists are never truncated (strings still clip, depth
+  cap unchanged). `test/unit/probe-cap.test.ts` drives `makeProbe` with a
+  201-tool inventory through `readProbe` and asserts all 201 survive with
+  `echo_tool` last; a second test asserts long strings still clip. The old
+  `slice(0, 200)` fails the first test.
+- OCI-1.4-providers + OCI-5.6-inert-window: already remediated by the M7
+  removal (fail-closed) — verified, no code change. `ConfigSchema.safeParse`
+  rejects `expect.providers`, `expect.models`, `gate.window` and
+  `gate.threshold`; pinned by `test/unit/removed-fields.test.ts` (names the
+  audit IDs; overlaps `config-schema.test.ts` which asserts the same four
+  rejections).
+- OCI-6.1-allowed-wiring (`src/run.ts:191-192`): extracted pure
+  `partitionVersions(versions)` (`{required, allowedVersions}`), called from
+  `runCi`; pinned by `test/unit/partition.test.ts`. The `slice(1)` → `[]`
+  sabotage goes red. Exit codes never read `allowedVersions` (report labels
+  only, fail-closed direction); the wiring is now pinned anyway.
+- OCI-2.5-files-symlink (`src/assert/expect.ts:318-370`): after the lexical
+  check, `evaluateFiles` resolves the nearest existing ancestor via
+  `realpathSync`, re-appends the missing tail, and re-checks containment;
+  any `realpath` error fails closed. `test/unit/files-symlink.test.ts`:
+  `linketc -> /etc` with `linketc/passwd` (exists and content assertions)
+  yields `path escapes the project dir`, with no host content leaked;
+  `sub/../ok.txt` still passes; lexical `../` still rejected.
+- OCI-6.4-action-pins: bumped to `@v7` in `action.yml`
+  (`actions/setup-node`, `actions/upload-artifact`) and
+  `.github/workflows/ci.yml` (`actions/checkout`, `actions/setup-node`);
+  `oven-sh/setup-bun@v2` is already at HEAD. Pinned by
+  `test/unit/action-pins.test.ts` (no `actions/*@v1..v6` in either file).
+  `rg '(checkout|setup-node|upload-artifact)@v[0-9]'` shows only v7.
+
+## P3
+
+- OCI-7.1-no-line: no code change. Validation errors name file + field, not
+  line (`formatIssues`: `${file}: validation failed:\n  - at "<path>":
+  <message>`; line hints exist only for YAML *parse* errors). Corrected the
+  claim wording in README ("errors name the file and field, not a line
+  number") and docs/SPEC 5.2 ("naming the file and field (not a line
+  number)"). The audit-report claim text itself lives outside this repo.
+- OCI-registry-drift (`src/opencode/binary.ts:79` `latest` floats): no code
+  change required. Policy note: `latest` resolves live per run
+  (`npmViewVersion`); drift 2.0.26 → 2.0.32 was verified additive-only by the
+  audit. Re-pinning policy: re-run the pinned-vs-head API diffs
+  (`tool/shell/catalog/hooks/policy/agent/session/permission`) and
+  `npm view @opencode/cli version` before moving the default; the allowed
+  `latest` leg absorbs drift without failing the job. A scheduled head-leg
+  e2e remains future work.
+- OCI-6.3-working-dir: docs now state `working-directory` must stay inside
+  `GITHUB_WORKSPACE` (`action.yml` input description, README, SPEC 8), plus
+  an env-passthrough guard keeping the zero-interpolation invariant —
+  `IN_WD: ${{ inputs.working-directory }}` with
+  `case "$IN_WD" in /*|*..*) ... exit 2;; esac` before any tier runs.
+  Pinned by `test/unit/action-working-dir.test.ts` (description, `IN_WD`
+  wiring with no `${{ inputs... }}` in `run:`, guard text, predicate cases).
+- OCI-7.2-floating-majors (overlaps OCI-6.4-action-pins): after the v7 bump,
+  SHAs recorded here (2026-10-18, `git ls-remote`):
+  `actions/checkout@v7` = `3d3c42e...` (v7.0.1),
+  `actions/setup-node@v7` = `949feb2...` (v7.1.0),
+  `actions/upload-artifact@v7` = `cf430e0...` (v7.0.2),
+  `oven-sh/setup-bun@v2` = `0c5077e...` (HEAD == v2.2.0, no lag).
+  Added `.github/dependabot.yml` (weekly `github-actions` updates) so the
+  floating majors stay current between audits.
+- OCI-6.2-artifact-poisoning: `ConfigSchema.superRefine` now fails
+  validation when `gate.artifact` is the default
+  (`DEFAULT_RESULTS_ARTIFACT` from `src/gate/history.ts`) AND
+  `opencode.versions` has more than one entry, with a message naming the
+  file and field (`gate.artifact must not be the default ... when
+  opencode.versions has more than one entry`). The `init` scaffold uses a
+  single version so fresh projects are unaffected; the README matrix example
+  (distinct `artifact-name` per leg) now matches enforced behavior.
+  Pinned by `test/unit/artifact-guard.test.ts`. Three existing
+  multi-version tests (`run-exit-codes` x2, `run-budget`) were updated to
+  use distinct gate artifacts.
+
+## Decisions / discrepancies
+
+- The brief's "extend tier1.test.ts or probe.test.ts with a runLoad-level
+  hook-order assertion" is inapplicable as written (tier 1 emits no hook
+  records); the order is pinned at the construction site instead (see
+  OCI-4.3-order above). No NOTES contradiction filed — the minimal path the
+  brief allows (`test/unit/load-order.test.ts`) is what shipped.
+- The brief's "one scripted e2e fixture whose script forces an error event"
+  (OCI-2.5-noerrors) is deferred: the stub cannot emit `error` events except
+  via the fake binary, and no passing-path turn emits them; the unit pin
+  covers the fallback.

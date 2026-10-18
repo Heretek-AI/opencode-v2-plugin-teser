@@ -67,8 +67,8 @@ evidence under `.opencode-ci/out/<opencode-version>/<scenario-id>/`
 ## Config reference
 
 `.opencode-ci/config.yaml` (or `config.json`; exactly one may exist).
-Every object is strict: unknown keys fail validation so typos never pass
-silently. Full schema: [schema/config.json](schema/config.json).
+Every object is strict: unknown keys fail validation — errors name the file
+and field, not a line number — so typos never pass silently. Full schema: [schema/config.json](schema/config.json).
 
 ```yaml
 # yaml-language-server: $schema=https://unpkg.com/@heretek-ai/opencode-plugin-ci/schema/config.json
@@ -299,7 +299,9 @@ is true, and `--gate` was passed or `GITHUB_ACTIONS == "true"`. Without
 **Matrix builds:** artifact names must be unique within a workflow run, so
 give each matrix leg a distinct `artifact-name` Action input. The Action
 passes it to the CLI as `--gate-artifact`, so each leg reads its own
-history; no config change is needed. Example:
+history; no config change is needed. This is enforced: validation fails
+when `gate.artifact` is the default `opencode-plugin-ci-results` while
+`opencode.versions` has more than one entry. Example:
 
 ```yaml
 strategy:
@@ -315,7 +317,8 @@ steps:
 ## GitHub Action
 
 `Heretek-AI/opencode-v2-plugin-teser@v1` (see [action.yml](action.yml)).
-Inputs `tiers`, `opencode-versions` (overrides config), `working-directory`,
+Inputs `tiers`, `opencode-versions` (overrides config), `working-directory`
+(must stay inside `GITHUB_WORKSPACE`; `..` and absolute paths fail closed),
 `upload-artifact` (default `true`), `artifact-name` (default
 `opencode-plugin-ci-results`; also the gate's history name). There is no
 `config` input: the tool reads `.opencode-ci/config.*` in

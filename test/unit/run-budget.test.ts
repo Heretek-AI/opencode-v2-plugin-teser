@@ -22,7 +22,7 @@ describe("live budget", () => {
 		const cwd = makePlugin({
 			"index.ts": PLUGIN_JS,
 			".opencode-ci/config.yaml":
-				'opencode:\n  versions: ["2.0.26", "latest"]\nlive:\n  model: fake/model\n  budgetUSD: 1\n',
+				'opencode:\n  versions: ["2.0.26", "latest"]\ngate:\n  artifact: run-budget-results\nlive:\n  model: fake/model\n  budgetUSD: 1\n',
 			".opencode-ci/scenarios/live.yaml":
 				"id: live-smoke\nmode: live\nprompt: hi\nexpect:\n  tools:\n    - name: echo_tool\n",
 		});

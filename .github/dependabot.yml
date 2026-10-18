@@ -1,0 +1,13 @@
+# OCI-7.2-floating-majors: GitHub Actions are consumed as floating major
+# tags (`checkout@v7`, `setup-node@v7`, `upload-artifact@v7`,
+# `setup-bun@v2`). Dependabot keeps those majors current so CI semantics
+# cannot drift silently between audits. Pinned SHAs at last review are in
+# docs/NOTES.md ("Audit P2/P3" section).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"

@@ -2,6 +2,7 @@
 // fail validation instead of silently passing (SPEC 5.1, 5.2).
 import { isAbsolute } from "node:path";
 import { z } from "zod";
+import { DEFAULT_RESULTS_ARTIFACT } from "../gate/history.ts";
 
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const SCENARIO_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -63,7 +64,7 @@ const gateConfigSchema = z
 		// Artifact name the gate downloads history from. `run --gate-artifact`
 		// overrides it; the GitHub Action passes its `artifact-name` input
 		// that way, so matrix legs never need per-leg config.
-		artifact: z.string().min(1).default("opencode-plugin-ci-results"),
+		artifact: z.string().min(1).default(DEFAULT_RESULTS_ARTIFACT),
 	})
 	.strict();
 
@@ -86,6 +87,24 @@ export const ConfigSchema = z
 				code: "custom",
 				path: ["live", "pass"],
 				message: `live.pass (${val.live.pass}) must be <= live.repeat (${val.live.repeat})`,
+			});
+		}
+		// OCI-6.2-artifact-poisoning: matrix legs uploading the same default
+		// artifact name collide (upload-artifact merges by name), so allowed
+		// `latest` results can poison required-leg gate history. Fail closed
+		// when the default name is shared across versions; per-leg distinct
+		// names (README matrix example) pass.
+		if (
+			val.opencode.versions.length > 1 &&
+			val.gate.artifact === DEFAULT_RESULTS_ARTIFACT
+		) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["gate", "artifact"],
+				message:
+					`gate.artifact must not be the default ${JSON.stringify(DEFAULT_RESULTS_ARTIFACT)} ` +
+					"when opencode.versions has more than one entry: give each matrix leg " +
+					"a distinct artifact name (e.g. opencode-plugin-ci-results-2.0.26).",
 			});
 		}
 	});

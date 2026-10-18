@@ -13,7 +13,8 @@ import {
 
 isolateCiEnv();
 
-const TWO_VERSIONS = 'opencode:\n  versions: ["2.0.26", "latest"]\n';
+const TWO_VERSIONS =
+	'opencode:\n  versions: ["2.0.26", "latest"]\ngate:\n  artifact: run-exit-codes-results\n';
 
 describe("runCi exit codes", () => {
 	test("a plugin that loads passes tier 1", async () => {
