@@ -1,0 +1,29 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - name: Install pinned opencode CLI
+        env:
+          OC_DIR: ${{ runner.temp }}/oc
+        run: npm install --no-save --no-audit --no-fund --prefix "$OC_DIR" @opencode/cli@2.0.26
+      - name: Run end-to-end tests
+        env:
+          OPENCODE_BIN: ${{ runner.temp }}/oc/node_modules/.bin/opencode
+        run: bun run test:e2e

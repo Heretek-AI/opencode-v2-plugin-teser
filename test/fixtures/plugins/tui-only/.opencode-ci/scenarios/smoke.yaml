@@ -1,0 +1,8 @@
+id: tui-only-smoke
+description: TUI-only plugin (static tier 1 passes, tiers 2 and 3 skipped)
+mode: scripted
+prompt: Hello.
+script:
+  - text: ok
+expect:
+  exitCode: 0

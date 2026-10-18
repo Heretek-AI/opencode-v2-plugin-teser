@@ -1,0 +1,19 @@
+NOTICE
+======
+
+This project includes files ported from other projects:
+
+- `src/gate/verdict.ts`: verbatim copy of Heretek-AI/IUMBTEMS
+  `packages/core/src/evals/gate.ts` (Apache-2.0), with only an added header
+  comment. Provides `decideGateVerdict` and `parseAcknowledgments`.
+- `src/gate/exit.ts`: verbatim copy of Heretek-AI/IUMBTEMS
+  `packages/core/src/evals/exit.ts` (Apache-2.0), with only an added header
+  comment. Provides `decideEvalsExit` (required by the ported gate tests).
+- `test/unit/gate-verdict.test.ts`: verbatim copy of Heretek-AI/IUMBTEMS
+  `packages/core/test/evals-gate.test.ts` (Apache-2.0), with only the two
+  import paths re-pointed at `src/gate/verdict.ts` and `src/gate/exit.ts`.
+- `src/gate/history.ts`, `src/gate/gate.ts`: flake-gate history fetching and
+  orchestration, ported from Heretek-AI/IUMBTEMS `scripts/e2e-gate.ts`
+  (Apache-2.0) and adapted (async injectable `gh` runner; absent
+  acknowledgments file defaults to empty per SPEC/M12 rather than failing;
+  see `docs/NOTES.md`).

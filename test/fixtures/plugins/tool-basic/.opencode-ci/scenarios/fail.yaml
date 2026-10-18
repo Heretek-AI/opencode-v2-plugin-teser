@@ -1,0 +1,15 @@
+id: tool-basic-fail
+description: Deliberately failing scenario (expects echo:bye, the tool returns echo:hi)
+mode: scripted
+prompt: Say hi through the echo tool.
+script:
+  - toolCalls:
+      - name: echo_tool
+        arguments: { text: hi }
+  - text: done
+expect:
+  exitCode: 0
+  tools:
+    - name: echo_tool
+      status: completed
+      output: { contains: "echo:bye" }

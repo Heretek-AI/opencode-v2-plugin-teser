@@ -1,0 +1,49 @@
+{
+	"name": "@heretek-ai/opencode-plugin-ci",
+	"version": "0.1.0",
+	"description": "Verify opencode v2 plugins actually work, locally and in GitHub Actions",
+	"license": "MIT",
+	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Heretek-AI/opencode-v2-plugin-teser.git"
+	},
+	"bin": {
+		"opencode-plugin-ci": "bin/opencode-plugin-ci.ts"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"files": [
+		"bin",
+		"src",
+		"probe",
+		"schema",
+		"examples",
+		"README.md",
+		"LICENSE",
+		"NOTICE"
+	],
+	"engines": {
+		"bun": ">=1.2"
+	},
+	"scripts": {
+		"check": "bun run typecheck && bun run lint && bun run test:unit",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"format": "biome format --write .",
+		"test:unit": "bun test ./test/unit",
+		"test:e2e": "bun test ./test/e2e --timeout 600000",
+		"schema": "bun scripts/gen-schema.ts"
+	},
+	"dependencies": {
+		"yaml": "^2.9.1",
+		"zod": "^4.1.0"
+	},
+	"devDependencies": {
+		"@opencode/plugin": "2.0.26",
+		"@types/bun": "^1.2.0",
+		"@biomejs/biome": "^2.0.0",
+		"typescript": "^5.8.0"
+	}
+}

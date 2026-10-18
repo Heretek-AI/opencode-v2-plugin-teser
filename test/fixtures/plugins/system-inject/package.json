@@ -1,0 +1,7 @@
+{
+	"name": "fixture-system-inject",
+	"type": "module",
+	"exports": {
+		"./server": "./src/server.ts"
+	}
+}

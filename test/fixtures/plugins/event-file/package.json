@@ -1,0 +1,7 @@
+{
+	"name": "fixture-event-file",
+	"type": "module",
+	"exports": {
+		"./server": "./src/server.ts"
+	}
+}

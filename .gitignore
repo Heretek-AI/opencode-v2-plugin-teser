@@ -1,0 +1,6 @@
+node_modules/
+review/
+.opencode-ci/out/
+coverage/
+*.log
+**/.opencode-ci/out/

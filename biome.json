@@ -1,0 +1,25 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+	"formatter": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true
+		}
+	},
+	"files": {
+		"includes": [
+			"**",
+			"!review",
+			"!schema",
+			"!test/fixtures/**/node_modules",
+			"!.opencode-ci/out",
+			"!**/.opencode-ci/out",
+			"!src/gate/verdict.ts",
+			"!src/gate/exit.ts",
+			"!test/unit/gate-verdict.test.ts"
+		]
+	}
+}

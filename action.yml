@@ -1,0 +1,62 @@
+name: opencode plugin CI
+description: Verify an opencode v2 plugin actually works
+branding: { icon: check-circle, color: green }
+inputs:
+  tiers:
+    description: "Comma-separated: load,scripted,live"
+    default: "load,scripted,live"
+  opencode-versions:
+    description: "Overrides config, comma-separated"
+    default: ""
+  working-directory:
+    description: "Plugin repo directory"
+    default: "."
+  upload-artifact:
+    description: "Upload evidence + results"
+    default: "true"
+  artifact-name:
+    description: "Artifact name for evidence + results (must match gate.artifact; use a distinct name per matrix leg)"
+    default: "opencode-plugin-ci-results"
+outputs:
+  result:
+    description: "pass | fail"
+    value: ${{ steps.run.outputs.result }}
+  report-path:
+    description: "Path to report.md"
+    value: ${{ steps.run.outputs.report-path }}
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+    - uses: actions/setup-node@v4
+      with: { node-version: 22 }
+    - name: Install tool dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: bun install --frozen-lockfile
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        # Inputs go through env, never interpolated into the script (prevents script injection).
+        IN_TIERS: ${{ inputs.tiers }}
+        IN_VERSIONS: ${{ inputs.opencode-versions }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        args=()
+        IFS=',' read -ra T <<< "$IN_TIERS"; for t in "${T[@]}"; do args+=(--tier "$t"); done
+        if [ -n "$IN_VERSIONS" ]; then IFS=',' read -ra V <<< "$IN_VERSIONS"; for v in "${V[@]}"; do args+=(--opencode "$v"); done; fi
+        set +e
+        bun "$ACTION_PATH/bin/opencode-plugin-ci.ts" run "${args[@]}" --out .opencode-ci/out
+        code=$?
+        set -e
+        echo "report-path=$PWD/.opencode-ci/out/report.md" >> "$GITHUB_OUTPUT"
+        if [ $code -eq 0 ]; then echo "result=pass" >> "$GITHUB_OUTPUT"; else echo "result=fail" >> "$GITHUB_OUTPUT"; fi
+        exit $code
+    - if: always() && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.working-directory }}/.opencode-ci/out
+        if-no-files-found: ignore

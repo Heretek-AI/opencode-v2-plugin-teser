@@ -1,0 +1,20 @@
+id: shell-env-pass
+description: shell.create.before injects FIXTURE_ON=1 into the shell env
+mode: scripted
+prompt: Show the fixture env var.
+script:
+  - toolCalls:
+      - name: shell
+        arguments:
+          command: "echo FIXTURE_ON=$FIXTURE_ON"
+          description: "print fixture env"
+  - text: done
+expect:
+  exitCode: 0
+  hooks:
+    - hook: shell.create.before
+      env: { FIXTURE_ON: { equals: "1" } }
+  tools:
+    - name: shell
+      status: completed
+      output: { contains: "FIXTURE_ON=1" }

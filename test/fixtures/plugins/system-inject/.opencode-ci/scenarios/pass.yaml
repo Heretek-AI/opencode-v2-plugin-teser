@@ -1,0 +1,11 @@
+id: system-inject-pass
+description: session context hook appends FIXTURE-SYSTEM to the system prompt
+mode: scripted
+prompt: Hello.
+script:
+  - text: done
+expect:
+  exitCode: 0
+  request:
+    nth: 1
+    system: { contains: FIXTURE-SYSTEM }
