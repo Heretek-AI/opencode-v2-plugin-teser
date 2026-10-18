@@ -53,14 +53,18 @@ describe("action.yml zero-interpolation guard", () => {
 	});
 
 	test("injected inputs/github expressions are caught", () => {
-		expect(runBlockIsClean('echo "tiers are ${{ inputs.tiers }}"')).toBe(false);
+		// Built without a literal `${{` so the fixture itself stays lint-clean.
+		const expr = (path: string): string => `$${"{{ "}${path} }`;
+		expect(runBlockIsClean(`echo "tiers are ${expr("inputs.tiers")}"`)).toBe(
+			false,
+		);
 		// A comment line still interpolates on the runner, so it must fail too.
-		expect(runBlockIsClean("# ${{ inputs.tiers }}")).toBe(false);
-		expect(runBlockIsClean("tag: ${{ github.action_path }}/x")).toBe(false);
+		expect(runBlockIsClean(`# ${expr("inputs.tiers")}`)).toBe(false);
+		expect(runBlockIsClean(`tag: ${expr("github.action_path")}/x`)).toBe(false);
 		expect(runBlockIsClean('args+=(--tier "$t")')).toBe(true);
 	});
 
-	test("`${{ github.action_path }}` stays out of run: blocks", () => {
+	test("github.action_path stays out of run: blocks", () => {
 		for (const script of runBlocks(action)) {
 			expect(script).not.toContain("github.action_path");
 		}

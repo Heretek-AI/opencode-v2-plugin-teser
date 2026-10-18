@@ -15,6 +15,8 @@ import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
 import { resetDir } from "../util/fs.ts";
+import { collectSecretValues, redactSecretValues } from "../util/redact.ts";
+import { collectLiveKeys } from "./live.ts";
 
 export interface RunScenarioOptions {
 	scenario: Scenario;
@@ -42,6 +44,9 @@ export async function runScenario(
 	const stub = await startStub({
 		script: scenario.script ?? [],
 		recordFile: join(evidenceDir, "stub-requests.jsonl"),
+		// Configured live-key values may have innocuous names: pass them
+		// explicitly on top of the secret-name env scan.
+		redactValues: collectSecretValues(collectLiveKeys(opts.config)),
 	});
 	// The shim lives inside the evidence dir (which is kept), not inside
 	// the sandbox root (which is deleted on dispose).
@@ -70,6 +75,11 @@ export async function runScenario(
 	try {
 		run = await sandbox.run(scenario.prompt, { timeoutMs });
 	} finally {
+		// Value-side scrubbing (OCI-7.3-evidence-leaks): persisted evidence
+		// must not carry live secret values; in-memory evidence stays raw so
+		// assertions still fail on leaks, and probe.jsonl stays raw so
+		// `notContains`-style assertions keep seeing the leak.
+		const secrets = collectSecretValues(collectLiveKeys(opts.config));
 		try {
 			if (existsSync(probeOut)) {
 				copyFileSync(probeOut, join(evidenceDir, "probe.jsonl"));
@@ -81,10 +91,16 @@ export async function runScenario(
 		}
 		writeFileSync(
 			join(evidenceDir, "events.jsonl"),
-			(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
-				(run?.events?.length ? "\n" : ""),
+			redactSecretValues(
+				(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
+					(run?.events?.length ? "\n" : ""),
+				secrets,
+			),
 		);
-		writeFileSync(join(evidenceDir, "stderr.log"), run?.stderr ?? "");
+		writeFileSync(
+			join(evidenceDir, "stderr.log"),
+			redactSecretValues(run?.stderr ?? "", secrets),
+		);
 		await stub.stop();
 	}
 	if (run === undefined) {

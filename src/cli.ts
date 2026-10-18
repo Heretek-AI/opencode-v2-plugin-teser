@@ -31,6 +31,7 @@ import type { ResultsFile } from "./report/results.ts";
 import { isTuiOnly, runCi, type TierName } from "./run.ts";
 import { ensureDir } from "./util/fs.ts";
 import { createLogger } from "./util/log.ts";
+import { collectSecretValues, redactSecretValues } from "./util/redact.ts";
 
 const USAGE = `opencode-plugin-ci
 
@@ -399,9 +400,16 @@ async function cmdReport(args: string[]): Promise<number> {
 	);
 	try {
 		const results = readResultsFile(resultsPath);
-		const markdown = renderMarkdown(results, {
-			allowedVersions: deriveAllowedVersions(results),
-		});
+		// Same value-side scrubbing as `run` (env scan only: the report
+		// command never loads live keys, so innocuously-named vars are not
+		// covered here — re-run instead of re-rendering for those).
+		const secrets = collectSecretValues();
+		const markdown = redactSecretValues(
+			renderMarkdown(results, {
+				allowedVersions: deriveAllowedVersions(results),
+			}),
+			secrets,
+		);
 		const reportPath = join(resultsPath, "..", "report.md");
 		await Bun.write(reportPath, markdown);
 		appendStepSummary(markdown);

@@ -15,6 +15,7 @@ import {
 	type Server,
 	type ServerResponse,
 } from "node:http";
+import { redactSecretValues } from "../util/redact.ts";
 import { allMessageText, findCatalogPath } from "./codemode.ts";
 
 export interface ToolCall {
@@ -44,6 +45,13 @@ export interface StubOptions {
 	script: Step[];
 	judgeReply?: string;
 	recordFile?: string;
+	/**
+	 * Live secret values to scrub from the `recordFile` JSONL (defense in
+	 * depth: a prompt that echoes a key would otherwise persist it into the
+	 * uploaded evidence). In-memory `requests` stay raw so assertions still
+	 * see — and fail on — leaked values.
+	 */
+	redactValues?: string[];
 }
 
 export interface Stub {
@@ -278,7 +286,13 @@ export async function startStub(opts: StubOptions): Promise<Stub> {
 		requests.push(full);
 		if (opts.recordFile) {
 			try {
-				appendFileSync(opts.recordFile, `${JSON.stringify(full)}\n`);
+				const line = JSON.stringify(full);
+				appendFileSync(
+					opts.recordFile,
+					opts.redactValues === undefined
+						? `${line}\n`
+						: `${redactSecretValues(line, opts.redactValues)}\n`,
+				);
 			} catch {
 				/* ignore record errors: stub replies must never fail */
 			}

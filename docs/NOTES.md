@@ -1,3 +1,60 @@
+# Audit P1 remediation (2026-10-18)
+
+Eight P1s from `AUDIT_REPORT_FINDINGS.md` (branch `fix/v1.1-audit-remediation`,
+three commits). Toolchain: Bun 1.4.2, `@opencode/cli@2.0.26` via the main
+repo's `review/oc` binary (read-only), `TMPDIR=/dev/shm/ocz`. `bun run check`
+ends at **286 pass, 0 fail** (248 baseline + 38 new).
+
+- OCI-4.4-workspace-escape: `safeWorkspaceDest` in `src/sandbox/sandbox.ts`
+  (`resolve`+`sep` containment mirroring `evaluateFiles`, absolute paths
+  rejected explicitly, `ConfigError`/exit 2). `test/unit/sandbox-escape.test.ts`
+  (5 tests). Guard-removal sabotage goes 1 pass / 4 fail.
+- OCI-4.4-ancestor: fail-closed allow-list in `runLoad` (`expectedInventoryIds`,
+  `findUnexpectedPlugins`, `detectAncestorConfig` in `src/tiers/load.ts`;
+  `test/unit/ancestor-guard.test.ts`, 11 tests). REFINEMENT vs the audit
+  text: a clean 2.0.26 inventory holds 86 `source.type: "builtin"` plugins
+  shipped with the binary, so builtins are exempt and only non-builtin,
+  non-configured plugins fail (`id` AND resolved local-path match, so an
+  ancestor plugin colliding with a probe id is still caught). Verified live:
+  clean tier 1 exit 0; planted `$TMPDIR/opencode.json` exit 1 with
+  `ancestor opencode config detected ...: sandbox isolation compromised.`;
+  planted local evil plugin exit 1 with
+  `unexpected plugins in inventory from ancestor config: [evil-ancestor-plugin].`
+- OCI-1.5-skip: `test/e2e/cli.test.ts` "run in throws exits 1" now asserts
+  `results.json` holds `throws-smoke` with `skipped: "tier 1 failed"`.
+- OCI-6.4-unpublished: README quickstart uses `bun <checkout>/...` source
+  form; `bunx` appears only in the unpublished note. Publish automation note:
+  no `npm publish` automation exists (same gap as `docs/NOTES.md:270`); to
+  close this P1 run `npm publish --provenance` for 0.1.0, then verify
+  `npm view @heretek-ai/opencode-plugin-ci version` and the unpkg
+  `$schema` URLs, and add a CI publish job. No publish attempted here
+  (no secrets).
+- OCI-6.3-action-guard: `test/unit/action-guard.test.ts` (YAML-parses
+  `action.yml`, asserts every `run:` block has no `${{ inputs./github. }}`;
+  comment-position injection included). Sabotage (`# ${{ inputs.tiers }}` in
+  `run:`) goes red; restored afterwards.
+- OCI-6.4-files-guard: `test/unit/packaging.test.ts` pins `files`/`bin` and
+  `npm pack --dry-run` contents. Dropping `probe` from `files` goes red
+  (deep-equal + tarball assertions).
+- OCI-7.3-redact-untested: `test/unit/probe-redact.test.ts` imports
+  `probe/core.js` (`@ts-ignore`: untyped JS, excluded from tsconfig) and
+  asserts each alternative individually with its own canary. Narrowing to
+  `/KEY/i` fails 5/7; narrowing to spec-four fails AUTH+COOKIE.
+- OCI-7.3-evidence-leaks: `redactSecretValues` + `collectSecretValues` in
+  `src/util/redact.ts`, applied to stub `recordFile` writes, tier
+  `events.jsonl`/`stderr.log` writes (load/scripted/live), `results.json`
+  display strings and `report.md`/step-summary/gate-section in `run.ts` and
+  the `report` command. In-memory evidence stays raw so assertions still fail
+  on leaks. `test/unit/evidence-scrub.test.ts` (8 tests). DEVIATIONS from the
+  audit Verify text: `probe.jsonl` stays raw by design (assertions need the
+  leak to fail the scenario); no validation-time warning when workspace text
+  contains key values (load-time warnings deferred — the scrub covers every
+  persisted surface except the intentionally-raw probe).
+
+Also: `Sandbox` now observes its `git init` promise so a throwing
+constructor (workspace containment) can never surface as an unhandled
+rejection late in the run.
+
 ## v1.1 (2026-10-18)
 
 Toolchain: Bun 1.4.2, `@opencode/cli@2.0.26` pinned

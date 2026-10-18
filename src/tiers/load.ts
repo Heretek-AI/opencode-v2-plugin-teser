@@ -17,6 +17,7 @@ import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
 import { isFile, resetDir } from "../util/fs.ts";
+import { collectSecretValues, redactSecretValues } from "../util/redact.ts";
 
 // Re-exported so existing importers (`./load.ts`) keep working.
 export type { CaseResult } from "../report/results.ts";
@@ -151,7 +152,6 @@ function sourcePathOf(source: unknown): string | undefined {
  * only for setup bugs (missing entry, sandbox crash).
  */
 export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
-	const pluginPath = resolve(opts.pluginPath);
 	const serverEntry = opts.serverEntry;
 
 	const evidenceDir = resolve(opts.outDir, opts.version, "load");
@@ -160,6 +160,9 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 	const stub = await startStub({
 		script: [{ text: "ok" }],
 		recordFile: join(evidenceDir, "stub-requests.jsonl"),
+		// Tier 1 has no live keys by construction, so this is the env scan
+		// only — still worth it if the ambient env holds a secret-like value.
+		redactValues: collectSecretValues(),
 	});
 	// The shim lives inside the evidence dir (which is kept), not inside
 	// the sandbox root (which is deleted on dispose).
@@ -183,6 +186,11 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 	try {
 		run = await sandbox.run("Reply with ok.");
 	} finally {
+		// Value-side scrubbing (OCI-7.3-evidence-leaks): persisted evidence
+		// must not carry live secret values. The in-memory `run.events` stay
+		// raw so assertions still evaluate — and fail on — leaked values;
+		// `probe.jsonl` stays raw for the same reason.
+		const secrets = collectSecretValues();
 		try {
 			copyFileSync(probeOut, join(evidenceDir, "probe.jsonl"));
 		} catch {
@@ -190,10 +198,16 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 		}
 		writeFileSync(
 			join(evidenceDir, "events.jsonl"),
-			(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
-				(run?.events?.length ? "\n" : ""),
+			redactSecretValues(
+				(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
+					(run?.events?.length ? "\n" : ""),
+				secrets,
+			),
 		);
-		writeFileSync(join(evidenceDir, "stderr.log"), run?.stderr ?? "");
+		writeFileSync(
+			join(evidenceDir, "stderr.log"),
+			redactSecretValues(run?.stderr ?? "", secrets),
+		);
 		await stub.stop();
 		await sandbox.dispose();
 	}

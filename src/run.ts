@@ -36,6 +36,7 @@ import { concurrencyLimit, pool, runScenario } from "./tiers/scripted.ts";
 import { runUiStatic } from "./tiers/ui-static.ts";
 import { appendFile, ensureDir } from "./util/fs.ts";
 import { createLogger, type Logger } from "./util/log.ts";
+import { collectSecretValues, redactSecretValues } from "./util/redact.ts";
 
 export type TierName = "load" | "scripted" | "live";
 
@@ -151,6 +152,32 @@ function skippedTuiOnly(scenario: Scenario, version: string): CaseResult {
 		skipped: "TUI-only plugin",
 		description: scenario.description,
 		durationMs: 0,
+	};
+}
+
+/**
+ * Replace known live secret values in display strings before persisting
+ * (OCI-7.3-evidence-leaks). Outcomes (`pass`, `skipped`, counts) and the
+ * evidence dirs are untouched, so the gate and exit codes behave identically.
+ */
+function scrubRow(row: CaseResult, secrets: string[]): CaseResult {
+	if (secrets.length === 0) {
+		return row;
+	}
+	const scrub = (text: string): string => redactSecretValues(text, secrets);
+	return {
+		...row,
+		failures: row.failures?.map(scrub),
+		textExcerpt:
+			row.textExcerpt === undefined ? undefined : scrub(row.textExcerpt),
+		attempts: row.attempts?.map((attempt) => ({
+			...attempt,
+			failures: attempt.failures.map(scrub),
+		})),
+		judge:
+			row.judge === undefined
+				? undefined
+				: { ...row.judge, reason: scrub(row.judge.reason) },
 	};
 }
 
@@ -445,13 +472,17 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		}
 	}
 
-	// 6. Write results.json + report.md (+ step summary).
+	// 6. Write results.json + report.md (+ step summary). Known live secret
+	// values are scrubbed from display strings before anything is persisted
+	// or summarized; in-memory verdicts were already computed on raw text.
+	const secrets = collectSecretValues(collectLiveKeys(config));
+	const scrubbed = results.map((row) => scrubRow(row, secrets));
 	const resultsFile: ResultsFile = {
 		version: 1,
 		at: new Date().toISOString(),
 		tool: toolVersion(),
 		plugin: pluginDisplayName(pluginPath),
-		results,
+		results: scrubbed,
 	};
 	const resultsPath = join(outDir, "results.json");
 	const reportPath = join(outDir, "report.md");
@@ -461,7 +492,10 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		`${JSON.stringify(resultsFile, null, 2)}\n`,
 		"utf8",
 	);
-	const markdown = renderMarkdown(resultsFile, { allowedVersions });
+	const markdown = redactSecretValues(
+		renderMarkdown(resultsFile, { allowedVersions }),
+		secrets,
+	);
 	writeFileSync(reportPath, markdown, "utf8");
 	appendStepSummary(markdown);
 	logger.info(
@@ -483,8 +517,9 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		logger,
 	});
 	if (gateOutcome.ran) {
-		appendFile(reportPath, gateOutcome.section);
-		appendStepSummary(gateOutcome.section);
+		const section = redactSecretValues(gateOutcome.section, secrets);
+		appendFile(reportPath, section);
+		appendStepSummary(section);
 		logger.info(
 			`Flake gate: exit ${gateOutcome.verdict?.exit ?? "unknown"} (exit ${gateOutcome.exitCode}).`,
 		);

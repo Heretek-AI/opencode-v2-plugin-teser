@@ -15,6 +15,7 @@ import { type ProbeLog, probePluginDirs, readProbe } from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { resetDir } from "../util/fs.ts";
+import { collectSecretValues, redactSecretValues } from "../util/redact.ts";
 import { runJudge } from "./judge.ts";
 
 /** Run-wide budget counter, shared by every live scenario in a run. */
@@ -362,6 +363,10 @@ export async function runLiveScenario(
 		try {
 			run = await sandbox.run(scenario.prompt, { timeoutMs });
 		} finally {
+			// Value-side scrubbing (OCI-7.3-evidence-leaks): the live tier
+			// carries the real key, so persisted evidence is scrubbed while
+			// in-memory evidence stays raw for assertions.
+			const secrets = collectSecretValues(keys);
 			try {
 				copyFileSync(probeOut, join(attemptDir, "probe.jsonl"));
 			} catch {
@@ -369,10 +374,16 @@ export async function runLiveScenario(
 			}
 			writeFileSync(
 				join(attemptDir, "events.jsonl"),
-				(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
-					(run?.events?.length ? "\n" : ""),
+				redactSecretValues(
+					(run?.events ?? []).map((e) => JSON.stringify(e)).join("\n") +
+						(run?.events?.length ? "\n" : ""),
+					secrets,
+				),
 			);
-			writeFileSync(join(attemptDir, "stderr.log"), run?.stderr ?? "");
+			writeFileSync(
+				join(attemptDir, "stderr.log"),
+				redactSecretValues(run?.stderr ?? "", secrets),
+			);
 		}
 		if (run === undefined) {
 			await sandbox.dispose();

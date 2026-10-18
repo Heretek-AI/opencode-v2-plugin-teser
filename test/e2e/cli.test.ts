@@ -2,7 +2,7 @@
 // review/oc): `run` in tool-basic passes with --scenario filtering and
 // writes report.md, `run` in throws exits 1, `validate` in no-entry exits 2.
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const CLI = resolve(import.meta.dir, "../../bin/opencode-plugin-ci.ts");
@@ -52,6 +52,19 @@ describe("cli e2e", () => {
 	test("run in throws exits 1", async () => {
 		const { code } = await runCli(["run"], join(FIXTURES, "throws"));
 		expect(code).toBe(1);
+		// OCI-1.5: a failing tier 1 must skip the later tiers for that
+		// version instead of running them (which would also burn live
+		// budget on doomed attempts).
+		const results = JSON.parse(
+			readFileSync(
+				join(FIXTURES, "throws", ".opencode-ci/out/results.json"),
+				"utf8",
+			),
+		) as {
+			results: { id: string; skipped?: string }[];
+		};
+		const smoke = results.results.find((r) => r.id === "throws-smoke");
+		expect(smoke?.skipped).toBe("tier 1 failed");
 	}, 600_000);
 
 	test("validate in no-entry exits 2", async () => {
