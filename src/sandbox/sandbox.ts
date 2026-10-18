@@ -5,7 +5,8 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { ConfigError } from "../config/load.ts";
 import { parseEvents, type RunEvent } from "../opencode/events.ts";
 
 export interface SandboxPlugin {
@@ -57,6 +58,29 @@ function stubProvider(baseURL: string): Record<string, unknown> {
 	};
 }
 
+/**
+ * Resolve a scenario `workspace` key to an absolute path inside `project`.
+ * Mirrors `evaluateFiles` containment in `src/assert/expect.ts`: absolute
+ * paths and any `..` escape of the project dir are a configuration error
+ * (exit 2 upstream), never a silent write outside the sandbox. `Sandbox`
+ * is public API, so this holds even when the schema already rejected the
+ * key: defense in depth at the write site.
+ */
+export function safeWorkspaceDest(project: string, rel: string): string {
+	if (isAbsolute(rel)) {
+		throw new ConfigError(
+			`workspace path "${rel}" must be relative and stay inside the project dir.`,
+		);
+	}
+	const dest = resolve(project, rel);
+	if (dest !== project && !dest.startsWith(project + sep)) {
+		throw new ConfigError(
+			`workspace path "${rel}" must be relative and stay inside the project dir.`,
+		);
+	}
+	return dest;
+}
+
 function runGitInit(
 	project: string,
 	env: Record<string, string>,
@@ -106,7 +130,7 @@ export class Sandbox {
 
 		writeFileSync(join(this.project, "README.md"), "# Sandbox project\n");
 		for (const [rel, content] of Object.entries(opts.workspace ?? {})) {
-			const dest = join(this.project, rel);
+			const dest = safeWorkspaceDest(this.project, rel);
 			mkdirSync(dirname(dest), { recursive: true });
 			writeFileSync(dest, content);
 		}

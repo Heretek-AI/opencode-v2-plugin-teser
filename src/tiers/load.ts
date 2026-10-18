@@ -3,16 +3,20 @@
 // every expected tool/command/agent/skill/mcp name.
 //
 import { copyFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { ConfigError } from "../config/load.ts";
 import { errors, textOf, usage } from "../opencode/events.ts";
 import { parseLogs, pluginLogProblems } from "../opencode/logs.ts";
 import { writeShim } from "../plugin/shim.ts";
-import { probePluginDirs, readProbe } from "../probe/read.ts";
+import {
+	type InventoryPlugin,
+	probePluginDirs,
+	readProbe,
+} from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
-import { resetDir } from "../util/fs.ts";
+import { isFile, resetDir } from "../util/fs.ts";
 
 // Re-exported so existing importers (`./load.ts`) keep working.
 export type { CaseResult } from "../report/results.ts";
@@ -40,6 +44,93 @@ export interface RunLoadOptions {
 /** First three lines of a (possibly multiline) error string. */
 function firstLines(text: string, count = 3): string {
 	return text.split("\n").slice(0, count).join("\n");
+}
+
+/**
+ * Plugin ids this tool installs itself: the pre/post probes. Anything else
+ * in the tier-1 inventory was merged from outside the sandbox config (for
+ * example an ancestor `opencode.json(c)` opencode walks up to), so it must
+ * fail tier 1 closed instead of silently joining the run.
+ */
+export const PROBE_PLUGIN_IDS = [
+	"opencode-plugin-ci.probe.pre",
+	"opencode-plugin-ci.probe.post",
+] as const;
+
+/** Allowed inventory ids: the probes plus the plugin under test, when known. */
+export function expectedInventoryIds(pluginId?: string): string[] {
+	return pluginId === undefined
+		? [...PROBE_PLUGIN_IDS]
+		: [...PROBE_PLUGIN_IDS, pluginId];
+}
+
+/**
+ * Inventory plugin ids that are not in `expectedIds` (deduped, in first-seen
+ * order). Binary builtins (`source.type === "builtin"`, shipped with the
+ * opencode binary itself — 86 of them in a clean 2.0.26 inventory) are always
+ * allowed. Every other plugin must be one of the configured local packages,
+ * matched by id AND by resolved local path: an ancestor `opencode.json(c)`
+ * can list foreign npm/local plugins (even under a colliding id), and those
+ * have a non-builtin source outside the configured dirs. Anything without a
+ * verifiable origin fails closed. An empty result means the sandbox saw
+ * exactly the configured set.
+ */
+export function findUnexpectedPlugins(
+	plugins: InventoryPlugin[],
+	expectedIds: string[],
+	allowedLocalDirs: string[],
+): string[] {
+	const allowedIds = new Set(expectedIds);
+	const extras: string[] = [];
+	for (const plugin of plugins) {
+		if (isBuiltinPlugin(plugin.source)) {
+			continue;
+		}
+		const path = sourcePathOf(plugin.source);
+		const dirOk =
+			path !== undefined &&
+			allowedLocalDirs.some((dir) => path === dir || dirname(path) === dir);
+		if (dirOk && plugin.id !== undefined && allowedIds.has(plugin.id)) {
+			continue;
+		}
+		const id = plugin.id ?? path ?? "(unknown plugin)";
+		if (!extras.includes(id)) {
+			extras.push(id);
+		}
+	}
+	return extras;
+}
+
+function isBuiltinPlugin(source: unknown): boolean {
+	return (
+		source !== null &&
+		typeof source === "object" &&
+		(source as { type?: unknown }).type === "builtin"
+	);
+}
+
+const ANCESTOR_CONFIG_NAMES = ["opencode.json", "opencode.jsonc"] as const;
+
+/**
+ * Walk from `startDir` up to the filesystem root, returning the first
+ * ancestor `opencode.json(c)` found. opencode merges ancestor configs into
+ * every run, so a hit means the sandbox is not isolated. Pure and sync so
+ * tests can plant a fake ancestor tree.
+ */
+export function detectAncestorConfig(startDir: string): string | undefined {
+	let dir = resolve(startDir);
+	for (;;) {
+		for (const name of ANCESTOR_CONFIG_NAMES) {
+			if (isFile(join(dir, name))) {
+				return join(dir, name);
+			}
+		}
+		const parent = dirname(dir);
+		if (parent === dir) {
+			return undefined;
+		}
+		dir = parent;
+	}
 }
 
 function sourcePathOf(source: unknown): string | undefined {
@@ -169,6 +260,23 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 				}
 			}
 		}
+		const unexpected = findUnexpectedPlugins(
+			inventory.plugins,
+			expectedInventoryIds(plugin?.id),
+			[pre, shimDir, post],
+		);
+		if (unexpected.length > 0) {
+			failures.push(
+				`unexpected plugins in inventory from ancestor config: [${unexpected.join(", ")}].`,
+			);
+		}
+	}
+
+	const ancestorConfig = detectAncestorConfig(sandbox.root);
+	if (ancestorConfig !== undefined) {
+		failures.push(
+			`ancestor opencode config detected at ${ancestorConfig}: sandbox isolation compromised.`,
+		);
 	}
 
 	const used = usage(run.events);
