@@ -4,7 +4,7 @@ const SECRET_KEY = /KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i;
 const MAX = 4000;
 const SYSTEM_MAX = 50000; // system parts are long; plugin additions often land at the end
 
-function clip(value, depth = 0, max = MAX) {
+function clip(value, depth = 0, max = MAX, capArrays = true) {
 	if (typeof value === "string") {
 		return value.length > max
 			? `${value.slice(0, max)}…[+${value.length - max}]`
@@ -13,11 +13,16 @@ function clip(value, depth = 0, max = MAX) {
 	if (value === null || typeof value !== "object") return value;
 	if (depth > 6) return "[depth]";
 	if (Array.isArray(value)) {
-		return value.slice(0, 200).map((item) => clip(item, depth + 1, max));
+		// OCI-1.4-cap: the 200-item cap truncated tier-1 inventory lists, so a
+		// plugin union over 200 tools failed tier 1 on clipping, not on the
+		// plugin. Inventory membership must never be truncated; only strings
+		// are clipped there. Every other record keeps the array cap.
+		const items = capArrays ? value.slice(0, 200) : value;
+		return items.map((item) => clip(item, depth + 1, max, capArrays));
 	}
 	const out = {};
 	for (const [key, item] of Object.entries(value)) {
-		out[key] = clip(item, depth + 1, max);
+		out[key] = clip(item, depth + 1, max, capArrays);
 	}
 	return out;
 }
@@ -49,6 +54,19 @@ const safe = async (fn) => {
 	}
 };
 
+/**
+ * Append one probe record. Metadata (`phase`, `seq`, `t`, `kind`) spreads
+ * LAST so a payload field can never overwrite it (OCI-3.3-meta). Exported so
+ * unit tests can pin the ordering against a payload-wins sabotage; `write`
+ * inside `makeProbe` is the only other spread site and delegates here.
+ */
+export function writeRecord(out, kind, data, phase, seq, max = MAX) {
+	appendFileSync(
+		out,
+		`${JSON.stringify({ ...clip(snapshot(data), 0, max, kind !== "inventory"), phase, seq, t: Date.now(), kind })}\n`,
+	);
+}
+
 export function makeProbe(phase) {
 	let seq = 0;
 	let inventoryDone = false;
@@ -58,11 +76,10 @@ export function makeProbe(phase) {
 			const out = ctx.options?.out;
 			if (!out) return;
 			// Metadata goes LAST so a payload field can never overwrite `kind`/`phase`.
+			// Single spread site: `writeRecord` below. Inventory records bypass
+			// the 200-item array cap (OCI-1.4-cap).
 			const write = (kind, data, max = MAX) =>
-				appendFileSync(
-					out,
-					`${JSON.stringify({ ...clip(snapshot(data), 0, max), phase, seq: seq++, t: Date.now(), kind })}\n`,
-				);
+				writeRecord(out, kind, data, phase, seq++, max);
 
 			write("setup", { ctxKeys: Object.keys(ctx) });
 

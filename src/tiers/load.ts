@@ -48,6 +48,27 @@ function firstLines(text: string, count = 3): string {
 }
 
 /**
+ * The tier-1 sandbox plugin order (OCI-4.3-order): the pre-probe records what
+ * the plugin under test receives, the post-probe records what it produced, so
+ * hooks fire in config `plugins` array order as `[pre, plugin, post]`.
+ * Extracted pure so a load-order regression (e.g. `[post, shim, pre]`,
+ * which silently inverts pre/post attribution) goes red in
+ * `test/unit/load-order.test.ts` instead of passing tier 1 unnoticed.
+ */
+export function buildLoadPlugins(
+	pre: string,
+	shimDir: string,
+	post: string,
+	pluginOptions: Record<string, unknown> | undefined,
+	probeOut: string,
+): Array<{ package: string; options: Record<string, unknown> }> {
+	return [
+		{ package: pre, options: { out: probeOut, phase: "pre" } },
+		{ package: shimDir, options: pluginOptions ?? {} },
+		{ package: post, options: { out: probeOut, phase: "post" } },
+	];
+}
+/**
  * Plugin ids this tool installs itself: the pre/post probes. Anything else
  * in the tier-1 inventory was merged from outside the sandbox config (for
  * example an ancestor `opencode.json(c)` opencode walks up to), so it must
@@ -173,11 +194,7 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 	const sandbox = new Sandbox({
 		opencodeBin: opts.opencodeBin,
 		stubUrl: stub.url,
-		plugins: [
-			{ package: pre, options: { out: probeOut, phase: "pre" } },
-			{ package: shimDir, options: opts.pluginOptions ?? {} },
-			{ package: post, options: { out: probeOut, phase: "post" } },
-		],
+		plugins: buildLoadPlugins(pre, shimDir, post, opts.pluginOptions, probeOut),
 		logLevel: opts.logLevel ?? "info",
 	});
 
