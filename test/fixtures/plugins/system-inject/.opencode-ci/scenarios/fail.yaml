@@ -1,0 +1,11 @@
+id: system-inject-fail
+description: Deliberately failing scenario (expects text the hook never adds)
+mode: scripted
+prompt: Hello.
+script:
+  - text: done
+expect:
+  exitCode: 0
+  request:
+    nth: 1
+    system: { contains: FIXTURE-ABSENT }

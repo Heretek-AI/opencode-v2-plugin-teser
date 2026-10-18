@@ -1,0 +1,16 @@
+id: shell-env-fail
+description: Deliberately failing scenario (expects FIXTURE_ON=2, the hook injects 1)
+mode: scripted
+prompt: Show the fixture env var.
+script:
+  - toolCalls:
+      - name: shell
+        arguments:
+          command: "echo FIXTURE_ON=$FIXTURE_ON"
+          description: "print fixture env"
+  - text: done
+expect:
+  exitCode: 0
+  hooks:
+    - hook: shell.create.before
+      env: { FIXTURE_ON: { equals: "2" } }

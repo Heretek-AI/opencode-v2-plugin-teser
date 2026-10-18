@@ -36,9 +36,36 @@ const CASES: Case[] = [
 	},
 	{ fixture: "tool-direct", file: "pass.yaml", pass: true },
 	{ fixture: "hook-mutate", file: "pass.yaml", pass: true },
+	{
+		fixture: "hook-mutate",
+		file: "fail.yaml",
+		pass: false,
+		contains:
+			'hooks[0].tool.execute.before@post.input.command: expected "echo secret", got "echo [x]".',
+	},
 	{ fixture: "shell-env", file: "pass.yaml", pass: true },
+	{
+		fixture: "shell-env",
+		file: "fail.yaml",
+		pass: false,
+		contains:
+			'hooks[0].shell.create.before@post.env.FIXTURE_ON: expected "2", got "1".',
+	},
 	{ fixture: "system-inject", file: "pass.yaml", pass: true },
+	{
+		fixture: "system-inject",
+		file: "fail.yaml",
+		pass: false,
+		contains: 'request.system: expected to contain "FIXTURE-ABSENT"',
+	},
 	{ fixture: "event-file", file: "pass.yaml", pass: true },
+	{
+		fixture: "event-file",
+		file: "fail.yaml",
+		pass: false,
+		contains:
+			"files[0]..fixture/events.log: expected file to exist, but it does not.",
+	},
 ];
 
 describe("tier 2 (scripted)", () => {

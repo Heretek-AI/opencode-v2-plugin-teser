@@ -13,6 +13,8 @@ expect:
     - name: echo_tool
       status: completed
       output: { contains: "echo:hi" }
+  # codemode is false, so the call must not go through Code Mode's execute tool.
+  noTools: [execute]
   request:
     nth: 1
     tools: { includes: [echo_tool] }

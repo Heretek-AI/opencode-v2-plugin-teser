@@ -1,0 +1,11 @@
+id: event-file-fail
+description: Deliberately failing scenario (no tool call, so the event never fires and the file is never written)
+mode: scripted
+prompt: Just answer.
+script:
+  - text: done
+expect:
+  exitCode: 0
+  files:
+    - path: .fixture/events.log
+      exists: true

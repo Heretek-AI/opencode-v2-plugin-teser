@@ -1,0 +1,16 @@
+id: hook-mutate-fail
+description: Deliberately failing scenario (expects the raw command after the hook, which redacts it)
+mode: scripted
+prompt: Print the word secret.
+script:
+  - toolCalls:
+      - name: shell
+        arguments: { command: "echo secret", description: "print secret" }
+  - text: done
+expect:
+  exitCode: 0
+  hooks:
+    - hook: tool.execute.before
+      phase: post
+      tool: shell
+      input: { command: { equals: "echo secret" } }

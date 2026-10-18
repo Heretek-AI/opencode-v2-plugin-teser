@@ -27,3 +27,35 @@ jobs:
         env:
           OPENCODE_BIN: ${{ runner.temp }}/oc/node_modules/.bin/opencode
         run: bun run test:e2e
+  action:
+    # Runs the composite Action from this checkout, the way users run it.
+    # load + scripted only: no live key is needed, and the gate never runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: pass
+        uses: ./
+        with:
+          working-directory: test/fixtures/plugins/tool-direct
+          tiers: load,scripted
+          artifact-name: action-self-test-pass
+      - id: fail
+        uses: ./
+        continue-on-error: true
+        with:
+          working-directory: test/fixtures/plugins/throws
+          tiers: load,scripted
+          artifact-name: action-self-test-fail
+      - name: Check the Action's outputs
+        env:
+          PASS_RESULT: ${{ steps.pass.outputs.result }}
+          PASS_REPORT: ${{ steps.pass.outputs.report-path }}
+          FAIL_RESULT: ${{ steps.fail.outputs.result }}
+          FAIL_OUTCOME: ${{ steps.fail.outcome }}
+        run: |
+          echo "pass: result=$PASS_RESULT report=$PASS_REPORT"
+          echo "fail: result=$FAIL_RESULT outcome=$FAIL_OUTCOME"
+          test "$PASS_RESULT" = pass
+          test -f "$PASS_REPORT"
+          test "$FAIL_OUTCOME" = failure
+          test "$FAIL_RESULT" = fail
