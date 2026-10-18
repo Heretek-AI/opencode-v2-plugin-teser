@@ -207,6 +207,9 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		wantedScenarios.includes(scenario.id);
 
 	const results: CaseResult[] = [];
+	// One budget for the whole live tier across every opencode version
+	// (SPEC 5.1: "hard stop for the whole live tier").
+	const budget: LiveBudget = { spent: 0, limit: config.live.budgetUSD };
 
 	// 4. One pass per opencode version.
 	for (const version of versions) {
@@ -300,7 +303,6 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 			// counter, so parallel runs would race the accounting.
 			const pending = live;
 			if (pending.length > 0) {
-				const budget: LiveBudget = { spent: 0, limit: config.live.budgetUSD };
 				const keys = collectLiveKeys(config);
 				if (Object.keys(keys).length === 0) {
 					const reason = noKeySkipReason(config);

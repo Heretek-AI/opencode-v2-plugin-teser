@@ -297,6 +297,7 @@ export async function runLiveScenario(
 	let durationMs = 0;
 	let textExcerpt: string | undefined;
 	let judge: { pass: boolean; reason: string } | undefined;
+	let budgetStop: string | undefined;
 
 	for (let n = 0; n < maxAttempts; n++) {
 		if (passed >= need) {
@@ -306,6 +307,12 @@ export async function runLiveScenario(
 			break;
 		}
 		if (opts.budget.spent >= opts.budget.limit) {
+			if (attempts.length > 0) {
+				// Attempts already ran and fewer than `pass` passed: stopping
+				// here must fail the case, never hide those attempts as a skip.
+				budgetStop = budgetExhaustedReason(opts.budget);
+				break;
+			}
 			return {
 				id: scenario.id,
 				tier: "live",
@@ -449,7 +456,7 @@ export async function runLiveScenario(
 		overallPass || attempts.length === 0
 			? undefined
 			: [
-					`live scenario ${scenario.id}: ${passed} of ${attempts.length} attempt(s) passed, needed ${need} of ${maxAttempts}.`,
+					`live scenario ${scenario.id}: ${passed} of ${attempts.length} attempt(s) passed, needed ${need} of ${maxAttempts}${budgetStop === undefined ? "" : ` (${budgetStop})`}.`,
 					...attempts.flatMap((attempt, index) =>
 						attempt.pass
 							? []

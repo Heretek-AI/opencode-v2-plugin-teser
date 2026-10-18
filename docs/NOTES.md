@@ -1,3 +1,15 @@
+# v1.1 M5: budget exhaustion fails started cases; one budget per run (2026-10-18)
+
+- Pre-fix run matched the brief exactly: `live-loop` 5 pass / 1 fail (the
+  budget-after-attempts case) and `run-budget` 0 pass / 1 fail (the `latest`
+  row ran on a fresh budget instead of skipping).
+- `src/tiers/live.ts`: `budgetStop` breaks the loop when attempts already ran
+  (failure line gains `(budget exhausted ...)`); the no-attempt path still
+  returns `skipped`. `src/run.ts`: one `LiveBudget` above the version loop.
+- Acceptance: new files 7 pass, 0 fail; `bun run check` 231 pass + the same
+  single environmental `stub.test.ts > recordFile` failure (/tmp inodes still
+  100% — see M4 note). `bun run format`: no fixes applied.
+
 # v1.1 M4: bun-test files by explicit path (2026-10-18)
 
 - New `test/unit/run-bun-test.test.ts` fails pre-fix with the genuine B3
