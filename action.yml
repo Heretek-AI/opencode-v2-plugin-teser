@@ -9,7 +9,7 @@ inputs:
     description: "Overrides config, comma-separated"
     default: ""
   working-directory:
-    description: "Plugin repo directory"
+    description: "Plugin repo directory; must be inside GITHUB_WORKSPACE (.. and absolute paths are unsupported)"
     default: "."
   upload-artifact:
     description: "Upload evidence + results"
@@ -28,7 +28,7 @@ runs:
   using: composite
   steps:
     - uses: oven-sh/setup-bun@v2
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with: { node-version: 22 }
     - name: Install tool dependencies
       shell: bash
@@ -43,8 +43,13 @@ runs:
         IN_TIERS: ${{ inputs.tiers }}
         IN_VERSIONS: ${{ inputs.opencode-versions }}
         IN_ARTIFACT: ${{ inputs.artifact-name }}
+        IN_WD: ${{ inputs.working-directory }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
+        # OCI-6.3-working-dir: working-directory must stay inside the
+        # workspace; `..` or absolute paths would escape GITHUB_WORKSPACE.
+        # Checked via env passthrough to keep the zero-interpolation invariant.
+        case "$IN_WD" in /*|*..*) echo "working-directory must be inside the workspace (got: $IN_WD)" >&2; exit 2;; esac
         args=()
         IFS=',' read -ra T <<< "$IN_TIERS"; for t in "${T[@]}"; do args+=(--tier "$t"); done
         if [ -n "$IN_VERSIONS" ]; then IFS=',' read -ra V <<< "$IN_VERSIONS"; for v in "${V[@]}"; do args+=(--opencode "$v"); done; fi
@@ -57,7 +62,7 @@ runs:
         if [ $code -eq 0 ]; then echo "result=pass" >> "$GITHUB_OUTPUT"; else echo "result=fail" >> "$GITHUB_OUTPUT"; fi
         exit $code
     - if: always() && inputs.upload-artifact == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.working-directory }}/.opencode-ci/out

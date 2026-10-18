@@ -2,8 +2,8 @@
 // Every failed assertion becomes a human-readable string ([] = pass).
 // Fail closed: missing records, missing files, and unparseable bodies are
 // failures, never silent passes.
-import { existsSync, readFileSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import type { Matcher, ScenarioExpect } from "../config/schema.ts";
 import { errors, textOf, toolUses } from "../opencode/events.ts";
 import type { ProbeLog, ProbeRecord } from "../probe/read.ts";
@@ -360,6 +360,42 @@ function evaluateFiles(expect: ScenarioExpect, ev: Evidence): string[] {
 		const absolute = resolve(base, file.path);
 		if (absolute !== base && !absolute.startsWith(base + sep)) {
 			failures.push(`${label}: path escapes the project dir.`);
+			return;
+		}
+		// OCI-2.5-files-symlink: the lexical check above is blind to symlinks
+		// (e.g. `linketc -> /etc` makes `linketc/passwd` read host files into
+		// `got` failure strings). Resolve the real path — the file itself when
+		// present, else its parent plus the final segment — and re-check
+		// containment. Fail closed on any realpath error.
+		try {
+			const baseReal = realpathSync(base);
+			// Nearest existing ancestor (the file itself when present), so
+			// assertions on not-yet-created files still resolve; then re-append
+			// the missing tail segments.
+			let cur = absolute;
+			const tail: string[] = [];
+			for (;;) {
+				if (existsSync(cur)) {
+					break;
+				}
+				const parent = dirname(cur);
+				if (parent === cur) {
+					break;
+				}
+				tail.unshift(basename(cur));
+				cur = parent;
+			}
+			const resolved = join(realpathSync(cur), ...tail);
+			if (resolved !== baseReal && !resolved.startsWith(baseReal + sep)) {
+				failures.push(
+					`${label}: path escapes the project dir (symlink target outside).`,
+				);
+				return;
+			}
+		} catch {
+			failures.push(
+				`${label}: path escapes the project dir (could not resolve real path).`,
+			);
 			return;
 		}
 		const present = existsSync(absolute);

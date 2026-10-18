@@ -40,6 +40,23 @@ import { collectSecretValues, redactSecretValues } from "./util/redact.ts";
 
 export type TierName = "load" | "scripted" | "live";
 
+/**
+ * Split the opencode version matrix into the required first version and the
+ * allowed-to-fail rest (OCI-6.1-allowed-wiring). Extracted pure so the wiring
+ * at the `runCi` call site is pinned: dropping the `allowedVersions`
+ * argument to the report renderer must go red here instead of silently
+ * rendering allowed legs as required.
+ */
+export function partitionVersions(versions: string[]): {
+	required: string;
+	allowedVersions: string[];
+} {
+	return {
+		required: versions[0] as string,
+		allowedVersions: versions.slice(1),
+	};
+}
+
 export interface RunOptions {
 	cwd?: string;
 	tiers?: TierName[];
@@ -228,8 +245,7 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 		opts?.opencodes !== undefined && opts.opencodes.length > 0
 			? opts.opencodes
 			: config.opencode.versions;
-	const required = versions[0] as string;
-	const allowedVersions = versions.slice(1);
+	const { required, allowedVersions } = partitionVersions(versions);
 	const outDir = resolve(opts?.out ?? join(cwd, ".opencode-ci/out"));
 
 	if (opts?.keep === true) {
