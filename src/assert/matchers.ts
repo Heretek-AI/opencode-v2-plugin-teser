@@ -89,6 +89,15 @@ export function check(
 	matcher: Matcher,
 	label: string,
 ): string[] {
+	// A field that was never recorded fails every matcher except
+	// `exists: false`. Otherwise a typo in a field name (`comand`) would let
+	// `notContains`/`notMatches` pass vacuously.
+	if (value === undefined && matcher.exists !== true) {
+		return matcher.exists === false
+			? []
+			: [`${label}: no value was recorded (check the field name).`];
+	}
+
 	const failures: string[] = [];
 
 	if (matcher.equals !== undefined && !deepEqual(value, matcher.equals)) {
