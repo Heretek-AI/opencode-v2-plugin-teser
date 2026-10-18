@@ -175,6 +175,11 @@ export class Sandbox {
 		this.probeFile = join(this.root, "probe.jsonl");
 
 		this.ready = runGitInit(this.project, this.env);
+		// The constructor can throw after this (workspace containment),
+		// leaving no Sandbox behind to await `ready`: observe it here so a
+		// late git failure never surfaces as an unhandled rejection. run()
+		// still awaits the original promise and reports the failure.
+		void this.ready.catch(() => undefined);
 	}
 
 	async run(prompt: string, opts?: SandboxRunOptions): Promise<RunOutput> {

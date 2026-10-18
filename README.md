@@ -28,12 +28,20 @@ in [schema/config.json](schema/config.json) and
 
 From your plugin repo root:
 
+> **NOTE: the package is not published to npm yet** (`0.1.0` unpublished),
+> so `bunx @heretek-ai/opencode-plugin-ci` 404s and the `$schema` URLs below
+> 404 too (editor schema assistance stays dead until publish). Until the
+> first publish, run the CLI from a source checkout: below,
+> `<checkout>` is your clone of this repo, and
+> `bun <checkout>/bin/opencode-plugin-ci.ts ...` takes the place of
+> `bunx @heretek-ai/opencode-plugin-ci ...`.
+
 ```sh
 # 1. Scaffold starter files (.opencode-ci/config.yaml + an example scenario).
 #    Plain `init` refuses to overwrite existing files; --force re-scaffolds
 #    the starters (used here so this quickstart is repeatable — back up any
 #    hand-written scenarios first).
-bunx @heretek-ai/opencode-plugin-ci init --force
+bun <checkout>/bin/opencode-plugin-ci.ts init --force
 
 # 2. Edit .opencode-ci/config.yaml: set plugin.path if your package lives in
 #    a subdirectory, list the tools/commands/agents/skills/mcp your plugin
@@ -41,16 +49,16 @@ bunx @heretek-ai/opencode-plugin-ci init --force
 #    See "Config reference" below.
 
 # 3. Check that everything validates and the plugin entry resolves.
-bunx @heretek-ai/opencode-plugin-ci validate
+bun <checkout>/bin/opencode-plugin-ci.ts validate
 
 # 4. Run the starter scenario. The live tier auto-skips when no API key
 #    is configured, so this is free and offline.
-bunx @heretek-ai/opencode-plugin-ci run --scenario example
+bun <checkout>/bin/opencode-plugin-ci.ts run --scenario example
 ```
 
 Add your own scenarios under `.opencode-ci/scenarios/` (see "Scenario
 reference" below) and run everything with plain
-`bunx @heretek-ai/opencode-plugin-ci run`.
+`bun <checkout>/bin/opencode-plugin-ci.ts run`.
 
 Open `.opencode-ci/out/report.md` for the report. Each scenario keeps its
 evidence under `.opencode-ci/out/<opencode-version>/<scenario-id>/`
