@@ -66,9 +66,9 @@ silently. Full schema: [schema/config.json](schema/config.json).
 # yaml-language-server: $schema=https://unpkg.com/@heretek-ai/opencode-plugin-ci/schema/config.json
 plugin:
   path: .                    # plugin package dir in the checkout
-  entry: dist/server.js       # optional override; else auto-detected
+  entry: dist/server.js       # optional; must exist after build, else auto-detected
   install: bun install        # optional, runs once before any tier
-  build: bun run build        # optional, runs once before any tier
+  build: bun run build        # optional, runs once before entries are resolved
   options: {}                 # default plugin options for every scenario
   ui: false                   # true = TUI-only plugin (tier 1 load check only)
 opencode:
@@ -79,21 +79,18 @@ expect:                       # tier 1 inventory expectations
   agents: []
   skills: []
   mcp: []
-  providers: []               # for provider plugins (tier 1)
-  models: []                  # for provider plugins (tier 1)
 live:
   model: opencode/some-model  # provider/model, or a bare id resolved via `opencode models`
   keys: [OPENCODE_API_KEY]    # env vars passed into the sandbox
   repeat: 3
   pass: 2                     # must be <= repeat
-  budgetUSD: 1.00             # hard stop for the whole live tier
+  budgetUSD: 1.00             # hard stop for the whole live tier, across all versions
+  timeoutMs: 240000           # per live attempt, unless the scenario sets timeoutMs
 gate:
   enabled: true               # historical flake gate, live tier only
-  window: 5
-  threshold: 0.9
   bootstrap: fail             # fail|allow — allow tolerates "no history yet"
   workflow: plugin-ci.yml     # optional; else inferred from GITHUB_WORKFLOW_REF
-  artifact: opencode-plugin-ci-results  # must match the Action's artifact-name input
+  artifact: opencode-plugin-ci-results  # history artifact; --gate-artifact (the Action's artifact-name) overrides it
 logLevel: info                # info|all
 ```
 
@@ -102,12 +99,12 @@ duplicate `id`s are an error. Schema:
 [schema/scenario.json](schema/scenario.json).
 
 ```yaml
-id: redacts-secrets           # ^[a-z0-9][a-z0-9-]*$
+id: redacts-secrets           # ^[a-z0-9][a-z0-9-]*$; "load" and "bun-test" are reserved
 description: execute.before strips API keys from bash commands
 mode: scripted                # scripted | live
 plugin:
   options: { mode: strict }   # merged over config plugin.options
-workspace:                    # files written into the project dir before the run
+workspace:                    # files written into the project dir before the run (relative paths, no "..")
   .env: "API_KEY=sk-test\n"
 prompt: "print the env file"
 script:                       # scripted only: one step per agent-loop request
@@ -115,7 +112,7 @@ script:                       # scripted only: one step per agent-loop request
       - name: shell
         arguments: { command: "cat .env", description: "show env" }
   - text: done
-timeoutMs: 120000
+timeoutMs: 120000             # optional; default 120000 (scripted) or live.timeoutMs (live)
 expect:
   exitCode: 0
   tools:
@@ -126,8 +123,9 @@ judge:                        # live only, optional
 ```
 
 Cross-field rules (all validated): `script` is required in scripted mode
-and forbidden in live mode; `expect.request` and `judgeReply` are
-scripted-only; `judge` is live-only; `live.pass <= live.repeat`.
+and forbidden in live mode; `expect.request` is scripted-only; `judge` is
+live-only; `live.pass <= live.repeat`; `id` must not be `load` or `bun-test`;
+`workspace` keys must be relative paths that stay inside the project dir.
 
 ## Scenario reference: one example per assertion type
 
@@ -136,7 +134,10 @@ most fields: `equals`, `contains`, `notContains`, `matches` / `notMatches`
 (JavaScript regex source; a leading `(?i)` enables case-insensitivity),
 `includes` (arrays), `exists`, `count` (`{ eq?, gte?, lte? }`).
 Non-string values are compared as JSON for the string matchers; `equals`
-uses deep equality.
+uses deep equality. **A field with no recorded value fails every matcher
+except `exists: false`**, so a misspelled field name (`input: { comand: …
+}`) fails with `no value was recorded (check the field name)` instead of
+passing a `notContains`.
 
 - **`exitCode`** — the `opencode run` exit code (default `0`):
   `exitCode: 0`
@@ -235,6 +236,11 @@ This means:
 - Because `--format json` only shows the outer `execute` call, write tool
   assertions against the **probe** (`tools:` / `hooks:`), which sees every
   inner call under its real name — never against `tool_use` events.
+- Tools registered with a `namespace` are recorded as
+  `<namespace>_<name>` (dots become `_`). In `tools:`, `noTools:` and
+  `hooks[].tool` you may write that name, `ns.name` or the catalog path
+  `tools.ns.name`; all three match. A bare `name` does not match, and the
+  failure says which namespaced name was recorded.
 
 ## Tiers
 
@@ -245,9 +251,12 @@ This means:
 | 3 | `live` | real provider | only with a key; `pass` of `repeat` attempts must pass |
 
 Filter with `run --tier load --tier scripted`, `--scenario <id>`
-(repeatable, comma-separated), `--opencode <v>`, `--out <dir>`, `--keep`
+(repeatable, comma-separated; an unknown id is a config error, exit 2),
+`--opencode <v>` (`x.y.z` or `latest`), `--out <dir>`, `--keep`
 (keep sandboxes for debugging), `--gate` (force the gate locally),
-`--verbose` / `--quiet`.
+`--gate-artifact <name>` (overrides `gate.artifact`), `--verbose` /
+`--quiet`. Each case's evidence dir under `--out` is wiped when the case
+starts, so re-running into the same out dir never mixes runs.
 
 TUI-only plugins (no server entry, or `plugin.ui: true`) get a static
 tier-1 check (default export has a string `id` and function `setup`) and
@@ -255,7 +264,12 @@ tiers 2–3 report `skipped`. A failing tier 1 marks that version's later
 tiers `skipped: "tier 1 failed"`. Results for `opencode.versions[0]` are
 required; other versions are allowed failures (reported, exit code
 unaffected). `.opencode-ci/**/*.test.ts` files run once via `bun test`
-with `OPENCODE_BIN` set, folded in as a `bun-test` case.
+with `OPENCODE_BIN` set, folded in as a `bun-test` case (the tool passes
+each file as an explicit `./` path, because `bun test` skips dot-dirs
+when given a directory filter). The live budget is shared by every
+version in one run. Once it is spent, a case that has not started is
+`skipped`, and a case that already ran attempts but has fewer than `pass`
+passes fails with `(budget exhausted …)` in its failure line.
 
 ## Gate (live tier only)
 
@@ -265,17 +279,19 @@ flake gate instead: the live tier fails only when a *stable* case (passed
 `.opencode-ci/acknowledgments.json` (`{ version: 1, acknowledgments:
 [{ case, reason, issue, date }] }`; malformed fails closed).
 
-History comes from earlier `opencode-plugin-ci-results` artifacts on the
-same branch via `gh`, so the workflow needs `actions: read`. The gate runs
+History comes from earlier `opencode-plugin-ci-results` artifacts via
+`gh`, so the workflow needs `actions: read`. Push runs read their own
+branch's history; pull request runs read the **base** branch's history
+(`GITHUB_BASE_REF`), since a PR's own ref has no earlier runs. The gate runs
 only when the live tier ran at least one non-skipped case, `gate.enabled`
 is true, and `--gate` was passed or `GITHUB_ACTIONS == "true"`. Without
 `gh`/token it falls back to "fail on any live failure". No history exits
 2 unless `gate.bootstrap: allow`.
 
 **Matrix builds:** artifact names must be unique within a workflow run, so
-give each matrix leg a distinct `artifact-name` Action input **and** set the
-same value in that leg's `gate.artifact` config (the gate downloads history
-by that name). Example:
+give each matrix leg a distinct `artifact-name` Action input. The Action
+passes it to the CLI as `--gate-artifact`, so each leg reads its own
+history; no config change is needed. Example:
 
 ```yaml
 strategy:
@@ -284,20 +300,19 @@ strategy:
 steps:
   - uses: Heretek-AI/opencode-v2-plugin-teser@v1
     with:
+      opencode-versions: ${{ matrix.opencode }}
       artifact-name: opencode-plugin-ci-results-${{ matrix.opencode }}
 ```
-
-with `gate: { artifact: opencode-plugin-ci-results-2.0.26 }` in the
-required leg's config (each leg reads its own checkout's config, so
-parameterize it per leg or keep one artifact per workflow).
 
 ## GitHub Action
 
 `Heretek-AI/opencode-v2-plugin-teser@v1` (see [action.yml](action.yml)).
 Inputs `tiers`, `opencode-versions` (overrides config), `working-directory`,
 `upload-artifact` (default `true`), `artifact-name` (default
-`opencode-plugin-ci-results`). Outputs `result` (`pass`/`fail`) and
-`report-path`. Inputs travel to the script through `env:`, never
+`opencode-plugin-ci-results`; also the gate's history name). There is no
+`config` input: the tool reads `.opencode-ci/config.*` in
+`working-directory`. Outputs `result` (`pass`/`fail`; a fully skipped run
+is `pass`) and `report-path`. Inputs travel to the script through `env:`, never
 interpolated. Minimal workflow ([examples/workflow.yml](examples/workflow.yml)):
 
 ```yaml

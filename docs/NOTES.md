@@ -1,3 +1,70 @@
+## v1.1 (2026-10-18)
+
+Toolchain: Bun 1.4.2, `@opencode/cli@2.0.26` pinned
+(`review/oc/node_modules/.bin/opencode --version` prints
+`opencode v2.0.26`). `bun install --frozen-lockfile`: no changes.
+
+- M1 reproductions (`review/spike-v1.1/`, git-ignored): step 1 printed
+  `The following filters did not match any test files` / `exit=1`, then
+  ` 1 pass` / `exit=0`; step 2 printed `run1 exit=0`, `run2 exit=0`,
+  `run3 exit=1` with probe counts `stale-out:2`, `stale-out-fresh:1`.
+- M6 re-run (fresh `review/spike-v1.1`, real opencode 2.0.26,
+  `TMPDIR=/dev/shm/ocz`): `run1 exit=0`, `run2 exit=1`, `run3 exit=1`,
+  both inventory counts `1`. B5 fixed.
+- M2: as briefed — fake opencode binary + shared test setup (4 pass).
+- M3: as briefed — build before entries, tier 1 takes `serverEntry` (5 pass).
+- M4: as briefed — `.opencode-ci` test files passed by explicit `./` path
+  (2 pass). Note: with /tmp inodes exhausted, unit runs used
+  `TMPDIR=/dev/shm/ocz`; unrelated to the fix.
+- M5: as briefed — budget exhaustion fails started cases, one budget per
+  run (7 pass).
+- M6: as briefed — evidence dirs reset per case, reserved ids,
+  `--opencode`/`--scenario` validation (6 pass), plus the M1 re-run above.
+- M7: as briefed — no-op config fields removed, `live.timeoutMs` is the
+  live default, schemas regenerated (schema-sync passes).
+- M8: as briefed — missing values fail every matcher except
+  `exists: false` (4 pass).
+- M9: as briefed — namespaced tool names normalized in assertions (4 pass).
+- M10: as briefed — PR gate history from the base branch,
+  `--gate-artifact` flag (2 pass).
+- M11: as briefed — judge stub defaults to fail, single defaults
+  warning, codemode comment fix. Decisions (review nits, no code change):
+  results keep the requested `opencode` version (SPEC 7.1: the
+  required/allowed split, `report` and gate key on it); the duplicate
+  `probe-live.jsonl` copy stays (harmless now that dirs are reset); gate
+  history still downloads the full evidence artifact (results-only
+  artifact is a v2 item).
+- M12: as briefed — one deliberately failing scenario per surface
+  fixture (hook-mutate, shell-env, system-inject, event-file),
+  `noTools: [execute]` proves `tool-direct` is direct, Action self-test
+  job in `.github/workflows/ci.yml`. Local Action run matched the brief
+  exactly: `tool-direct exit=0` with `result=pass` and a `report-path`
+  line, `throws exit=1` with `result=fail` (2.6 caveat stands: composite
+  outputs on failure were exercised only locally, not on GitHub — if the
+  `fail` leg's `result` comes back empty there, keep the `outcome`
+  check, drop only the `FAIL_RESULT` line).
+- M13: as briefed — README replacements applied in order; `grep -n
+  "providers\|window: 5\|threshold\|judgeReply" README.md` prints
+  nothing, `grep -c -- "--gate-artifact" README.md` gives 3;
+  `bun run check` 248 pass.
+- live: not run (per 2.6; covered by the fake binary, no real key used).
+- SPEC re-read (3.2, 4, 5.1, 5.2, 5.3, 6.1, 6.2, 7.1, 7.2, 8, 9): every
+  sentence confirmed in code except the Known gaps below.
+
+Known gaps (SPEC statements the code does not fully implement):
+
+- No `workspace.tar` or per-case `result.json` (evidence dirs hold
+  `events.jsonl`, `probe.jsonl`, `stub-requests.jsonl`, `stderr.log`;
+  per-case `result.json` and failure-only `workspace.tar` deferred to v2).
+- No `webfetch`/`websearch` report flag (observable only via raw
+  evidence or `noTools`; flagging deferred to v2).
+- `ctx.storage` is not snapshotted into evidence.
+- No dogfood scheduled workflow over `awesome-opencode`.
+- Gate history downloads the full evidence artifact per run (deleted
+  after reading); a results-only artifact is a v2 item.
+- Provider expectations deferred to v2 (`expect.providers`/`models`
+  fail validation instead of being silently ignored).
+
 # v1.1 M11: judge stub defaults to fail; single defaults warning; comment fix (2026-10-18)
 
 - `src/tiers/judge.ts`: stub judge default is now a fail
