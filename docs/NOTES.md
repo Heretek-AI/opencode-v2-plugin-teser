@@ -1,3 +1,24 @@
+# v1.1 M4: bun-test files by explicit path (2026-10-18)
+
+- New `test/unit/run-bun-test.test.ts` fails pre-fix with the genuine B3
+  message (`The following filters did not match any test files ...
+  .opencode-ci`, verified by stashing the fix and re-running), and passes
+  2/2 post-fix. `src/run.ts` passes each discovered file as an explicit
+  `./`-relative path.
+- ENVIRONMENTAL BLOCKER (not a code failure): `bun run check` shows
+  223 pass + 1 fail in `test/unit/stub.test.ts > recordFile gets one JSONL
+  line per request`. That test hardcodes
+  `/tmp/opencode-plugin-ci-stub-test-<pid>.jsonl` (line 230), and /tmp has
+  0 free inodes (`df -i`: 1048576/1048576 used). Top consumers are other
+  sessions' dirs (`opencode-harness-audit-QyyFZg` 400k inodes,
+  `opencode-harness-audit-V9uKqK` 195k, `m6probe`, `m6run2`, `opencode`,
+  `lobehub`, `paperclip`); I own no files in /tmp (my runs use
+  `TMPDIR=/dev/shm/ocz` or clean up via `cleanupTempDirs`), so there is
+  nothing safe to delete. The same test passed in the M3 check (222 pass)
+  when inodes were momentarily available. Retried 4 times, same single
+  failure. Re-run `bun run check` once /tmp drains to confirm 224 pass.
+- `bun run format`: no fixes applied.
+
 # v1.1 M3: build before entries, serverEntry plumbing (2026-10-18)
 
 - New `test/unit/run-entry.test.ts` failed to load before the fix

@@ -391,13 +391,18 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 			logger.info(`Running programmatic tests: ${testFiles.length} file(s)...`);
 			const { bin } = await resolveOpencode(required);
 			const started = Date.now();
-			const proc = Bun.spawn(["bun", "test", ".opencode-ci"], {
-				cwd,
-				env: { ...process.env, OPENCODE_BIN: bin },
-				stdout: "pipe",
-				stderr: "pipe",
-				stdin: "ignore",
-			});
+			// Explicit "./" paths: `bun test <dir>` skips dot-directories, so a
+			// ".opencode-ci" filter never matches any file (bun 1.4.2).
+			const proc = Bun.spawn(
+				["bun", "test", ...testFiles.map((file) => `./${relative(cwd, file)}`)],
+				{
+					cwd,
+					env: { ...process.env, OPENCODE_BIN: bin },
+					stdout: "pipe",
+					stderr: "pipe",
+					stdin: "ignore",
+				},
+			);
 			const [stdout, stderr] = await Promise.all([
 				new Response(proc.stdout as ReadableStream).text(),
 				new Response(proc.stderr as ReadableStream).text(),
