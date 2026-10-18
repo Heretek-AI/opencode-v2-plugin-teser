@@ -283,3 +283,47 @@ the copy taught the README:
   stays, so the quickstart runs `--scenario example` (the scaffolded
   starter) rather than the full suite. Full `run` in the unmodified fixture
   still exits 1 on `tool-basic-fail` by design.
+
+# M14 notes (2026-10-17): final pass
+
+`bun run check` green (exit 0: typecheck + `biome check` clean, 213 unit
+tests pass). `bun run test:e2e` with
+`OPENCODE_BIN=review/oc/node_modules/.bin/opencode` green (exit 0: 24
+pass, 0 fail, ~26s). `bun scripts/gen-schema.ts` produces no diff
+(schemas in sync; `schema-sync.test.ts` also passes). README quickstart
+re-verified literally in a fresh copy of the `tool-basic` fixture
+(`init --force` / `validate` / `run --scenario example`, all exit 0).
+`LICENSE` (MIT), `NOTICE` (all four ported paths) and Apache headers on
+`src/gate/verdict.ts`, `src/gate/exit.ts` and the ported test are present.
+Milestone commits M1–M13 exist on `impl/v1`; M14 leaves the tree as-is
+(coordinator commits/opens the PR). SPEC re-read top to bottom; every
+statement not listed under "Known gaps" below was confirmed in code.
+
+## Known gaps (SPEC statements the code does not fully implement)
+
+- SPEC 6.4: tier 1 ignores `expect.providers`/`expect.models` — the probe
+  records no provider/model inventory and `runLoad` never asserts on them;
+  provider plugins therefore get load checks for registration only.
+- SPEC 6.2: evidence dirs contain `events.jsonl`, `probe.jsonl`,
+  `stub-requests.jsonl`, `stderr.log` but no `workspace.tar` (failures
+  only) and no per-scenario `result.json` (only the top-level
+  `results.json`).
+- SPEC 6.5: the report does not flag `webfetch`/`websearch` `tool_use` in
+  scripted scenarios; network use is observable only via raw evidence.
+- SPEC 5.3: the snippet's API names are illustrative — actual exports are
+  `new Sandbox(...)` (no `Sandbox.create`), `readProbe` (no `loadProbe`),
+  `evaluate`/`check` (no `assert`); README documents the real API.
+- SPEC background table: `ctx.storage` is not snapshotted into evidence;
+  no assertion surface exists for it.
+- SPEC 9: no dogfood scheduled workflow over `awesome-opencode`; only
+  `.github/workflows/ci.yml` exists (validation-plan aspiration, outside
+  M1–M13 scope).
+- SPEC 8: the Action has no `config` path input (config is always resolved
+  under `working-directory`) and its `result` output emits only
+  `pass`/`fail`, never `skipped`.
+- SPEC 3.3 (deviation, benign): the probe redacts
+  `/KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i`, a fail-closed superset of
+  the spec's `/KEY|TOKEN|SECRET|PASSWORD/i`.
+- Carried from M12: custom `gate.window`/`gate.threshold` no longer take
+  effect (verbatim upstream verdict hard-codes >= 5 samples, >= 90%);
+  defaults (5 / 0.9) keep default behavior identical.
