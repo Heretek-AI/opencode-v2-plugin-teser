@@ -82,11 +82,7 @@
         "additionalProperties": false
       }
     },
-    "judgeReply": {
-      "type": "string"
-    },
     "timeoutMs": {
-      "default": 120000,
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
@@ -653,7 +649,6 @@
     "id",
     "mode",
     "prompt",
-    "timeoutMs",
     "expect"
   ],
   "additionalProperties": false

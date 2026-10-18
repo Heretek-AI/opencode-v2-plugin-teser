@@ -41,8 +41,6 @@ const configExpectSchema = z
 		agents: stringArray(),
 		skills: stringArray(),
 		mcp: stringArray(),
-		providers: stringArray(),
-		models: stringArray(),
 	})
 	.strict();
 
@@ -60,8 +58,6 @@ const liveConfigSchema = z
 const gateConfigSchema = z
 	.object({
 		enabled: z.boolean().default(true),
-		window: z.number().int().positive().default(5),
-		threshold: z.number().min(0).max(1).default(0.9),
 		bootstrap: z.enum(["fail", "allow"]).default("fail"),
 		workflow: z.string().min(1).optional(),
 		// Artifact name the gate downloads history from. Must match the
@@ -229,8 +225,9 @@ export const ScenarioSchema = z
 		workspace: z.record(z.string(), z.string()).optional(),
 		prompt: z.string().min(1),
 		script: z.array(stepSchema).optional(),
-		judgeReply: z.string().optional(),
-		timeoutMs: z.number().int().positive().default(120_000),
+		// No default here: scripted runs fall back to 120000 and live runs to
+		// config.live.timeoutMs, so an unset value must stay distinguishable.
+		timeoutMs: z.number().int().positive().optional(),
 		expect: scenarioExpectSchema.prefault({}),
 		judge: judgeSchema.optional(),
 	})
@@ -279,13 +276,6 @@ export const ScenarioSchema = z
 				code: "custom",
 				path: ["judge"],
 				message: `${tag}: field "judge" is live-only and is not allowed when mode is "scripted"`,
-			});
-		}
-		if (val.mode === "live" && val.judgeReply !== undefined) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["judgeReply"],
-				message: `${tag}: field "judgeReply" is scripted-only and is not allowed when mode is "live"`,
 			});
 		}
 	});

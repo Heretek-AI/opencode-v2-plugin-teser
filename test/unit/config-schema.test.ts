@@ -27,8 +27,6 @@ describe("ConfigSchema defaults", () => {
 			agents: [],
 			skills: [],
 			mcp: [],
-			providers: [],
-			models: [],
 		});
 		expect(config.live.keys).toEqual(["OPENCODE_API_KEY"]);
 		expect(config.live.repeat).toBe(3);
@@ -36,8 +34,6 @@ describe("ConfigSchema defaults", () => {
 		expect(config.live.budgetUSD).toBe(1);
 		expect(config.live.timeoutMs).toBe(240_000);
 		expect(config.gate.enabled).toBe(true);
-		expect(config.gate.window).toBe(5);
-		expect(config.gate.threshold).toBe(0.9);
 		expect(config.gate.bootstrap).toBe("fail");
 		expect(config.gate.workflow).toBeUndefined();
 		expect(config.logLevel).toBe("info");
@@ -150,16 +146,25 @@ describe("cross-field rules", () => {
 		}
 	});
 
-	test("judgeReply is scripted-only", () => {
+	test("judgeReply is no longer a scenario field", () => {
 		const parsed = ScenarioSchema.safeParse({
-			id: "live-x",
-			mode: "live",
-			prompt: "hi",
+			...scriptedBase,
 			judgeReply: '{"pass":true}',
 		});
 		expect(parsed.success).toBe(false);
 		if (!parsed.success) {
-			expect(parsed.error.issues[0]?.message).toMatch(/"judgeReply"/);
+			expect(parsed.error.issues[0]?.message).toMatch(/judgeReply/);
+		}
+	});
+
+	test("removed config fields fail validation instead of being ignored", () => {
+		for (const raw of [
+			{ expect: { providers: ["p"] } },
+			{ expect: { models: ["m"] } },
+			{ gate: { window: 10 } },
+			{ gate: { threshold: 0.5 } },
+		]) {
+			expect(ConfigSchema.safeParse(raw).success).toBe(false);
 		}
 	});
 
@@ -239,11 +244,11 @@ describe("scenario ids and shapes", () => {
 		expect(parsed.success).toBe(true);
 	});
 
-	test("scenario timeoutMs defaults to 120000", () => {
+	test("scenario timeoutMs has no schema default (tiers apply their own)", () => {
 		const parsed = ScenarioSchema.safeParse(scriptedBase);
 		expect(parsed.success).toBe(true);
 		if (parsed.success) {
-			expect(parsed.data.timeoutMs).toBe(120_000);
+			expect(parsed.data.timeoutMs).toBeUndefined();
 			expect(parsed.data.expect.exitCode).toBe(0);
 			expect(parsed.data.expect.noErrors).toBe(true);
 		}

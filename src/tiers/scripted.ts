@@ -41,7 +41,6 @@ export async function runScenario(
 
 	const stub = await startStub({
 		script: scenario.script ?? [],
-		judgeReply: scenario.judgeReply,
 		recordFile: join(evidenceDir, "stub-requests.jsonl"),
 	});
 	// The shim lives inside the evidence dir (which is kept), not inside
@@ -66,11 +65,10 @@ export async function runScenario(
 		logLevel: opts.logLevel ?? opts.config.logLevel,
 	});
 
+	const timeoutMs = scenario.timeoutMs ?? 120_000;
 	let run: RunOutput | undefined;
 	try {
-		run = await sandbox.run(scenario.prompt, {
-			timeoutMs: scenario.timeoutMs,
-		});
+		run = await sandbox.run(scenario.prompt, { timeoutMs });
 	} finally {
 		try {
 			if (existsSync(probeOut)) {
@@ -99,7 +97,7 @@ export async function runScenario(
 	const probe = readProbe(join(evidenceDir, "probe.jsonl"));
 	try {
 		if (run.timedOut) {
-			failures.push(`opencode run timed out after ${scenario.timeoutMs}ms.`);
+			failures.push(`opencode run timed out after ${timeoutMs}ms.`);
 		}
 		failures.push(
 			...evaluate(scenario.expect, {

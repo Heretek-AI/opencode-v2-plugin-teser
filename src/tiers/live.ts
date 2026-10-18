@@ -286,6 +286,9 @@ export async function runLiveScenario(
 	}
 	const resolvedModel = model;
 
+	// Live models are slower than the stub: an unset scenario timeout uses
+	// config.live.timeoutMs [240000], not the scripted default.
+	const timeoutMs = scenario.timeoutMs ?? opts.config.live.timeoutMs;
 	const need = opts.config.live.pass;
 	const maxAttempts = opts.config.live.repeat;
 	const attempts: { pass: boolean; failures: string[] }[] = [];
@@ -357,9 +360,7 @@ export async function runLiveScenario(
 
 		let run: RunOutput | undefined;
 		try {
-			run = await sandbox.run(scenario.prompt, {
-				timeoutMs: scenario.timeoutMs,
-			});
+			run = await sandbox.run(scenario.prompt, { timeoutMs });
 		} finally {
 			try {
 				copyFileSync(probeOut, join(attemptDir, "probe.jsonl"));
@@ -385,7 +386,7 @@ export async function runLiveScenario(
 		let judgeFiles: string | undefined;
 		try {
 			if (run.timedOut) {
-				failures.push(`opencode run timed out after ${scenario.timeoutMs}ms.`);
+				failures.push(`opencode run timed out after ${timeoutMs}ms.`);
 			}
 			failures.push(
 				...evaluate(scenario.expect, {
@@ -428,7 +429,7 @@ export async function runLiveScenario(
 				env: keys,
 				evidenceDir: attemptDir,
 				logLevel: opts.logLevel ?? opts.config.logLevel,
-				timeoutMs: scenario.timeoutMs,
+				timeoutMs,
 				text: textOf(run.events),
 				toolCalls: summarizeToolCalls(probe),
 				hookSummary: summarizeHooks(probe),
