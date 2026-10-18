@@ -143,6 +143,27 @@ function requestToolNames(body: unknown): string[] {
 	return [...names];
 }
 
+/**
+ * Canonical tool name for comparisons. Hooks record a namespaced tool under
+ * its effective name `<namespace>_<name>` (dots in the namespace become
+ * underscores), while catalogs and `tool_use` inner calls use dots
+ * (`tools.ns.my_tool`, `ns.my_tool`). Joining the segments with `_` maps all
+ * of those to the effective name.
+ */
+export function normalizeToolName(name: string): string {
+	const segments =
+		name.startsWith("tools.") || name.startsWith("tools[")
+			? pathSegments(name)
+			: name.split(".");
+	return segments.join("_");
+}
+
+/** Recorded names that end in `_<wanted>`: likely the namespaced form the author meant. */
+function namespacedHints(recorded: string[], wanted: string): string[] {
+	const suffix = `_${normalizeToolName(wanted)}`;
+	return [...new Set(recorded.filter((name) => name.endsWith(suffix)))];
+}
+
 const HOOK_KINDS: Record<string, string> = {
 	"tool.execute.before": "tool.before",
 	"tool.execute.after": "tool.after",
@@ -156,13 +177,23 @@ function evaluateTools(expect: ScenarioExpect, ev: Evidence): string[] {
 	const wanted = expect.tools ?? [];
 	wanted.forEach((tool, index) => {
 		const label = `tools[${index}].${tool.name}`;
-		const calls = ev.probe
-			.toolCalls("post")
-			.filter((call) => call.tool === tool.name);
+		const recorded = ev.probe.toolCalls("post");
+		const calls = recorded.filter(
+			(call) => normalizeToolName(call.tool) === normalizeToolName(tool.name),
+		);
 		failures.push(
 			...check(calls.length, { count: tool.count ?? { gte: 1 } }, label),
 		);
 		if (calls.length === 0) {
+			const hints = namespacedHints(
+				recorded.map((call) => call.tool),
+				tool.name,
+			);
+			if (hints.length > 0) {
+				failures.push(
+					`${label}: namespaced tools are recorded as <namespace>_<name>; did you mean ${hints.join(" or ")}?`,
+				);
+			}
 			return;
 		}
 		const perCall = calls.map((call) => {
@@ -196,7 +227,12 @@ function evaluateTools(expect: ScenarioExpect, ev: Evidence): string[] {
 			use.tool,
 			...use.innerCalls.map((inner) => inner.tool),
 		]);
-		if (probeNames.includes(name) || eventNames.includes(name)) {
+		const wanted = normalizeToolName(name);
+		if (
+			[...probeNames, ...eventNames].some(
+				(called) => normalizeToolName(called) === wanted,
+			)
+		) {
 			failures.push(
 				`noTools: expected tool ${JSON.stringify(name)} not to be called, but it was.`,
 			);
@@ -212,8 +248,9 @@ function evaluateHooks(expect: ScenarioExpect, ev: Evidence): string[] {
 		const label = `hooks[${index}].${hook.hook}@${hook.phase}`;
 		let candidates = ev.probe.byKind(kind, hook.phase);
 		if (hook.tool !== undefined) {
+			const wanted = normalizeToolName(hook.tool);
 			candidates = candidates.filter(
-				(record) => String(record.tool ?? "") === hook.tool,
+				(record) => normalizeToolName(String(record.tool ?? "")) === wanted,
 			);
 		}
 		if (candidates.length === 0) {
