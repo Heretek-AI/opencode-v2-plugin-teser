@@ -8,9 +8,8 @@
 
 /** Every `tools.…(` call path listed in a Code Mode catalog. */
 export function catalogPaths(text: string): string[] {
-	// NOTE: the capture group below includes the trailing "(" (the `\(` sits
-	// inside the group in the spec regex). Strip it so the result is a usable
-	// call path such as `tools.spike_echo` rather than `tools.spike_echo(`.
+	// The capture group includes the trailing "(", which is stripped so the
+	// result is a usable call path such as `tools.spike_echo`.
 	const re =
 		/^\s*-\s+(tools(?:\.[A-Za-z_$][\w$]*|\[(?:"[^"]+"|'[^']+')\])+\()/gm;
 	return [...text.matchAll(re)].flatMap((m) =>

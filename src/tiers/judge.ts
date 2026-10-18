@@ -190,7 +190,8 @@ export async function runJudge(opts: RunJudgeOptions): Promise<JudgeOutcome> {
 	if (process.env.OPENCODE_PLUGIN_CI_JUDGE_VIA_STUB === "1") {
 		const stub = await startStub({
 			script: [],
-			judgeReply: opts.stubReply ?? '{"pass":true,"reason":"stubbed"}',
+			judgeReply:
+				opts.stubReply ?? '{"pass":false,"reason":"no stubReply given"}',
 		});
 		const sandbox = new Sandbox({
 			opencodeBin: opts.opencodeBin,

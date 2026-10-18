@@ -98,9 +98,6 @@ export function loadConfig(cwd: string = process.cwd()): {
 		const warnings = [
 			`No ${CONFIG_YAML} or ${CONFIG_JSON} found under ${cwd}: using defaults.`,
 		];
-		for (const w of warnings) {
-			console.warn(w);
-		}
 		return { config: ConfigSchema.parse({}), warnings };
 	}
 	const configPath = hasYaml ? yamlPath : jsonPath;

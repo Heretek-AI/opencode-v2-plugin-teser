@@ -1,3 +1,23 @@
+# v1.1 M11: judge stub defaults to fail; single defaults warning; comment fix (2026-10-18)
+
+- `src/tiers/judge.ts`: stub judge default is now a fail
+  (`'{"pass":false,"reason":"no stubReply given"}'`), per review nit —
+  fail closed when no reply is stubbed. `grep -c '"pass":true'
+  src/tiers/judge.ts` → 0.
+- `src/config/load.ts`: deleted the direct `console.warn` loop; the
+  "using defaults" warning is returned in `warnings` and printed once by
+  the caller. `grep -c "console.warn" src/config/load.ts` → 0.
+- `src/stub/codemode.ts`: comment fixed (no longer blames the brief's
+  regex for the trailing `(`).
+- Review-nit decisions (no code change, SPEC-kept as is):
+  - Results keep `opencode` as the requested version (`latest`), because
+    the required/allowed split, `report` and the gate key on it (SPEC 7.1).
+  - The duplicate `probe-live.jsonl` copy in evidence dirs stays; harmless
+    now that dirs are reset per case.
+  - Gate history still downloads the full evidence artifact per run;
+    splitting out a results-only artifact is a v2 item.
+- `bun run format`: applied (tabs); `bun run check` → 248 pass.
+
 # v1.1 M6: reset evidence dirs per case; reserve tool ids; validate --opencode and --scenario (2026-10-18)
 
 - Pre-fix run matched the brief: `run-inputs` failed to load
