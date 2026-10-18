@@ -1,3 +1,15 @@
+# v1.1 M2: fake opencode binary and shared test setup (2026-10-18)
+
+Toolchain: bun 1.4.2, `opencode v2.0.26` pinned binary.
+
+- Created `test/helpers/fake-opencode.ts` (plan-playback fake: writes probe
+  records + `step_finish` cost, counts `run` invocations), `test/helpers/tmp.ts`
+  (temp dirs with cleanup) and `test/helpers/run-ci.ts` (`makePlugin`,
+  `useFake`, `isolateCiEnv`) exactly per the brief.
+- `test/unit/run-exit-codes.test.ts`: 4 pass, 0 fail on first run (expected:
+  these cover behavior that already works; they prove the fake works).
+- `bun run check`: 217 pass, 0 fail. `bun run format`: no fixes applied.
+
 # Spike notes (M2)
 
 Date: 2026-10-17. opencode: `opencode v2.0.26`
