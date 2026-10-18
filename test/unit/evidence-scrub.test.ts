@@ -27,9 +27,9 @@ describe("redactSecretValues", () => {
 	});
 
 	test("longer overlapping values scrub completely", () => {
-		expect(redactSecretValues("xxabcxx", ["abc", "xxabcxx"])).toBe(
-			"[redacted]",
-		);
+		expect(
+			redactSecretValues("xxsecret12xx", ["secret12", "xxsecret12xx"]),
+		).toBe("[redacted]");
 	});
 
 	test("values with regex metacharacters match literally", () => {
@@ -39,8 +39,41 @@ describe("redactSecretValues", () => {
 
 	test("empty, whitespace-only and short values are skipped", () => {
 		expect(redactSecretValues("abc 123", ["", "   ", "123"])).toBe("abc 123");
+		// Anything under 8 chars — including common env noise like "false"
+		// (e.g. TOKENIZERS_PARALLELISM=false) — is never scrubbed.
+		expect(
+			redactSecretValues("Defaults to false; code 1234567", [
+				"false",
+				"1234567",
+			]),
+		).toBe("Defaults to false; code 1234567");
 	});
 
+	test("scrubs each value's JSON-escaped form as well", () => {
+		const value = `sec"ret\\key-123`;
+		expect(value.length).toBeGreaterThanOrEqual(8);
+		const line = JSON.stringify({ content: `print ${value} now` });
+		expect(line).toContain(value.slice(0, 3));
+		// The raw value does not appear literally in the JSON line (quotes
+		// and backslashes are escaped), yet scrubbing must still catch it.
+		expect(line).not.toContain(value);
+		const scrubbed = redactSecretValues(line, [value]);
+		expect(scrubbed).not.toContain(JSON.stringify(value).slice(1, -1));
+		expect(scrubbed).toContain("[redacted]");
+		// And the raw form is still scrubbed where it appears literally.
+		expect(redactSecretValues(`saw ${value} here`, [value])).toBe(
+			"saw [redacted] here",
+		);
+	});
+
+	test("never throws and returns text unchanged on malformed input", () => {
+		expect(
+			redactSecretValues("keep false intact", ["false", 42 as never]),
+		).toBe("keep false intact");
+		expect(
+			redactSecretValues("untouched", undefined as unknown as string[]),
+		).toBe("untouched");
+	});
 	test("clean text and an empty secret list pass through", () => {
 		expect(redactSecretValues("nothing here", [CANARY])).toBe("nothing here");
 		expect(redactSecretValues(`has ${CANARY}`, [])).toBe(`has ${CANARY}`);
@@ -61,21 +94,32 @@ describe("collectSecretValues", () => {
 		saved.clear();
 	});
 
-	test("picks up secret-named env vars plus explicit key values", () => {
-		for (const name of ["OCI_SCRUB_TEST_KEY", "OCI_SCRUB_TEST_PLAIN"]) {
-			if (!saved.has(name)) {
-				saved.set(
-					name,
-					Object.hasOwn(process.env, name) ? process.env[name] : undefined,
-				);
-			}
+	function setEnv(name: string, value: string): void {
+		if (!saved.has(name)) {
+			saved.set(
+				name,
+				Object.hasOwn(process.env, name) ? process.env[name] : undefined,
+			);
 		}
-		process.env.OCI_SCRUB_TEST_KEY = CANARY;
-		process.env.OCI_SCRUB_TEST_PLAIN = "not-a-secret-name";
+		process.env[name] = value;
+	}
+
+	test("picks up explicit key values and ignores host env", () => {
+		setEnv("OCI_SCRUB_TEST_KEY", CANARY);
+		setEnv("OCI_SCRUB_TEST_PLAIN", "not-a-secret-name");
+		setEnv("TOKENIZERS_PARALLELISM", "false");
+		// Host env is never scanned, even for secret-looking names.
+		expect(collectSecretValues()).toEqual([]);
 		const values = collectSecretValues({ MY_API: "explicit-key-value" });
-		expect(values).toContain(CANARY);
 		expect(values).toContain("explicit-key-value");
+		expect(values).not.toContain(CANARY);
 		expect(values).not.toContain("not-a-secret-name");
+		expect(values).not.toContain("false");
+	});
+
+	test("an explicitly passed value is picked up even if secret-named", () => {
+		setEnv("OCI_SCRUB_TEST_KEY", CANARY);
+		expect(collectSecretValues({ MY_API: CANARY })).toContain(CANARY);
 	});
 });
 
@@ -115,6 +159,39 @@ describe("evidence scrubbing", () => {
 		// Assertions evaluate the in-memory record, so the leak is still
 		// visible (and catchable) there.
 		expect(JSON.stringify(stub.requests[0]?.body)).toContain(CANARY);
+	});
+
+	test("host env noise (TOKENIZERS_PARALLELISM=false) leaves evidence JSONL valid", async () => {
+		const had = Object.hasOwn(process.env, "TOKENIZERS_PARALLELISM")
+			? process.env.TOKENIZERS_PARALLELISM
+			: undefined;
+		process.env.TOKENIZERS_PARALLELISM = "false";
+		try {
+			const dir = tempDir("evidence-scrub-r2-");
+			const recordFile = join(dir, "stub-requests.jsonl");
+			const stub = await startStub({
+				script: [{ text: "Defaults to false." }],
+				recordFile,
+				redactValues: collectSecretValues(),
+			});
+			stubs.push(stub);
+			await post(stub.url, {
+				messages: [{ role: "user", content: "Defaults to false." }],
+				tools: [{ type: "function", function: { name: "read" } }],
+			});
+			const persisted = readFileSync(recordFile, "utf8");
+			expect(persisted).toContain("false");
+			expect(persisted).not.toContain("[redacted]");
+			for (const line of persisted.trim().split("\n")) {
+				JSON.parse(line);
+			}
+		} finally {
+			if (had === undefined) {
+				delete process.env.TOKENIZERS_PARALLELISM;
+			} else {
+				process.env.TOKENIZERS_PARALLELISM = had;
+			}
+		}
 	});
 
 	test("report markdown scrubs secret values from failures", () => {

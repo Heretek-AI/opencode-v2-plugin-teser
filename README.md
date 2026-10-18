@@ -299,9 +299,9 @@ is true, and `--gate` was passed or `GITHUB_ACTIONS == "true"`. Without
 **Matrix builds:** artifact names must be unique within a workflow run, so
 give each matrix leg a distinct `artifact-name` Action input. The Action
 passes it to the CLI as `--gate-artifact`, so each leg reads its own
-history; no config change is needed. This is enforced: validation fails
-when `gate.artifact` is the default `opencode-plugin-ci-results` while
-`opencode.versions` has more than one entry. Example:
+history; no config change is needed. Matrix legs SHOULD use a distinct
+artifact-name (passed as `--gate-artifact`) so each leg reads its own
+history; no config change is needed, and validation does NOT enforce this. Example:
 
 ```yaml
 strategy:
@@ -318,7 +318,7 @@ steps:
 
 `Heretek-AI/opencode-v2-plugin-teser@v1` (see [action.yml](action.yml)).
 Inputs `tiers`, `opencode-versions` (overrides config), `working-directory`
-(must stay inside `GITHUB_WORKSPACE`; `..` and absolute paths fail closed),
+(must stay inside `GITHUB_WORKSPACE`; absolute paths inside the workspace are fine, paths outside exit 2),
 `upload-artifact` (default `true`), `artifact-name` (default
 `opencode-plugin-ci-results`; also the gate's history name). There is no
 `config` input: the tool reads `.opencode-ci/config.*` in

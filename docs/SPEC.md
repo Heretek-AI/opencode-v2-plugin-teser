@@ -187,7 +187,7 @@ gate:
   enabled: true              # historical flake gate, live tier only (7.2)
   bootstrap: fail            # fail | allow ("no history yet" passes)
   workflow: plugin-ci.yml    # optional; else from GITHUB_WORKFLOW_REF
-  artifact: opencode-plugin-ci-results  # history artifact; `run --gate-artifact` overrides it (must be distinct per leg when versions > 1)
+  artifact: opencode-plugin-ci-results  # history artifact; `run --gate-artifact` overrides it
 logLevel: info               # info | all
 ```
 
@@ -312,7 +312,7 @@ This is ported from `IUMBTEMS/scripts/e2e-gate.ts` and applies only to live-tier
 - **Acknowledgments**: `.opencode-ci/acknowledgments.json` in the plugin repo has the format `{ "version": 1, "acknowledgments": [{ "case", "reason", "issue", "date" }] }`. It is human-written; the tool never writes it. It is fail-closed: a malformed file fails the gate.
 - **No history**: a red live tier with no history to judge it against exits 2. The Action reports this as a failure unless `gate.bootstrap: allow` is set, for the first runs in a new repo.
 - **Local runs**: the gate is skipped locally unless `--gate` is passed. It then needs `gh`, a token (`GH_TOKEN` or `GITHUB_TOKEN`), `GITHUB_REPOSITORY` and a branch (`GITHUB_BASE_REF` or `GITHUB_REF_NAME`); without them it falls back to "fail on any live failure".
-- **Matrix builds**: artifact names must be unique within a workflow run, so each leg sets its own `artifact-name`, and that same name is the leg's gate history. No per-leg config is needed. Validation enforces this: the default `gate.artifact` with more than one `opencode.versions` entry is a configuration error.
+- **Matrix builds**: artifact names must be unique within a workflow run, so each leg sets its own `artifact-name`, and that same name is the leg's gate history. No per-leg config is needed. Matrix legs SHOULD use a distinct `artifact-name` so each leg reads its own history; validation does NOT enforce this.
 
 ## 8. Packaging
 
@@ -349,7 +349,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 ```
 
-Inputs are `tiers`, `opencode-versions` (overrides config), `working-directory` (must stay inside `GITHUB_WORKSPACE`; `..` and absolute paths exit 2), `upload-artifact` (default true) and `artifact-name` (default `opencode-plugin-ci-results`; passed to the CLI as `--gate-artifact`). There is no `config` input: the CLI reads `.opencode-ci/config.*` in `working-directory`. Outputs are `result` (`pass` when the CLI exits 0, else `fail`; a fully skipped run is `pass`) and `report-path`. Inputs reach the script only through `env:`, never through `${{ }}` inside `run:`.
+Inputs are `tiers`, `opencode-versions` (overrides config), `working-directory` (must stay inside `GITHUB_WORKSPACE`; absolute paths inside the workspace are fine, paths outside exit 2), `upload-artifact` (default true) and `artifact-name` (default `opencode-plugin-ci-results`; passed to the CLI as `--gate-artifact`). There is no `config` input: the CLI reads `.opencode-ci/config.*` in `working-directory`. Outputs are `result` (`pass` when the CLI exits 0, else `fail`; a fully skipped run is `pass`) and `report-path`. Inputs reach the script only through `env:`, never through `${{ }}` inside `run:`.
 
 The docs must state plainly: never run this on `pull_request_target` with the PR's code checked out and secrets exposed. The live tier runs the plugin under test with the real key.
 

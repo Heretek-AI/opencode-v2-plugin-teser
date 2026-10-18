@@ -89,24 +89,6 @@ export const ConfigSchema = z
 				message: `live.pass (${val.live.pass}) must be <= live.repeat (${val.live.repeat})`,
 			});
 		}
-		// OCI-6.2-artifact-poisoning: matrix legs uploading the same default
-		// artifact name collide (upload-artifact merges by name), so allowed
-		// `latest` results can poison required-leg gate history. Fail closed
-		// when the default name is shared across versions; per-leg distinct
-		// names (README matrix example) pass.
-		if (
-			val.opencode.versions.length > 1 &&
-			val.gate.artifact === DEFAULT_RESULTS_ARTIFACT
-		) {
-			ctx.addIssue({
-				code: "custom",
-				path: ["gate", "artifact"],
-				message:
-					`gate.artifact must not be the default ${JSON.stringify(DEFAULT_RESULTS_ARTIFACT)} ` +
-					"when opencode.versions has more than one entry: give each matrix leg " +
-					"a distinct artifact name (e.g. opencode-plugin-ci-results-2.0.26).",
-			});
-		}
 	});
 
 export type Config = z.infer<typeof ConfigSchema>;
