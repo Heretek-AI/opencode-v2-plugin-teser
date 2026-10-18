@@ -14,6 +14,7 @@ import { writeShim } from "../plugin/shim.ts";
 import { type ProbeLog, probePluginDirs, readProbe } from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
+import { resetDir } from "../util/fs.ts";
 import { runJudge } from "./judge.ts";
 
 /** Run-wide budget counter, shared by every live scenario in a run. */
@@ -248,7 +249,7 @@ export async function runLiveScenario(
 ): Promise<CaseResult> {
 	const scenario = opts.scenario;
 	const evidenceDir = resolve(opts.outDir, opts.version, scenario.id);
-	mkdirSync(evidenceDir, { recursive: true });
+	resetDir(evidenceDir, opts.outDir);
 
 	const keys = opts.keys ?? collectLiveKeys(opts.config);
 	if (Object.keys(keys).length === 0) {

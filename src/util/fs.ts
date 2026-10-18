@@ -3,12 +3,30 @@ import {
 	appendFileSync,
 	mkdirSync,
 	readFileSync,
+	rmSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 
 /** mkdir -p. */
 export function ensureDir(dir: string): void {
+	mkdirSync(dir, { recursive: true });
+}
+
+/**
+ * Empty `dir` (rm -rf, then mkdir -p). Evidence dirs are reset before each
+ * case because the probe appends: records left by an earlier run in the same
+ * out dir would otherwise be evaluated as if this run produced them. Refuses
+ * any `dir` that is not strictly inside `root`, so a bad path segment can
+ * never delete something outside the out dir.
+ */
+export function resetDir(dir: string, root: string): void {
+	const rel = relative(root, dir);
+	if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+		throw new Error(`refusing to reset ${dir}: it is not inside ${root}`);
+	}
+	rmSync(dir, { recursive: true, force: true });
 	mkdirSync(dir, { recursive: true });
 }
 

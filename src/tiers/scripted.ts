@@ -3,7 +3,7 @@
 // Each scenario gets its own stub, sandbox, and evidence directory, so
 // scenarios can run concurrently through the `pool` helper below.
 
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { join, resolve } from "node:path";
 import { evaluate } from "../assert/expect.ts";
@@ -14,6 +14,7 @@ import { probePluginDirs, readProbe } from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
+import { resetDir } from "../util/fs.ts";
 
 export interface RunScenarioOptions {
 	scenario: Scenario;
@@ -36,7 +37,7 @@ export async function runScenario(
 ): Promise<CaseResult> {
 	const scenario = opts.scenario;
 	const evidenceDir = resolve(opts.outDir, opts.version, scenario.id);
-	mkdirSync(evidenceDir, { recursive: true });
+	resetDir(evidenceDir, opts.outDir);
 
 	const stub = await startStub({
 		script: scenario.script ?? [],

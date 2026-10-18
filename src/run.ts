@@ -15,7 +15,7 @@
 //    failure. Results on non-first versions are allowed failures.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { loadAll } from "./config/load.ts";
+import { ConfigError, loadAll } from "./config/load.ts";
 import type { Config, Scenario } from "./config/schema.ts";
 import { runGate } from "./gate/gate.ts";
 import { resolveOpencode } from "./opencode/binary.ts";
@@ -165,6 +165,15 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 	const { config, scenarios, warnings } = loadAll(cwd);
 	for (const warning of warnings) {
 		logger.warn(warning);
+	}
+
+	const unknown = (wantedScenarios ?? []).filter(
+		(id) => !scenarios.some((scenario) => scenario.id === id),
+	);
+	if (unknown.length > 0) {
+		throw new ConfigError(
+			`unknown --scenario id(s): ${unknown.join(", ")} (known: ${scenarios.map((s) => s.id).join(", ") || "none"}).`,
+		);
 	}
 
 	const pluginPath = resolve(cwd, config.plugin.path);

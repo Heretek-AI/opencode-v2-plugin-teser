@@ -2,12 +2,13 @@
 // process and check the default export looks like a plugin
 // ({ id: string, setup: function }). No opencode run is involved.
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ConfigError } from "../config/load.ts";
 import { resolveEntries } from "../plugin/entry.ts";
 import type { CaseResult } from "../report/results.ts";
+import { resetDir } from "../util/fs.ts";
 
 export interface RunUiStaticOptions {
 	pluginPath: string;
@@ -48,7 +49,7 @@ export async function runUiStatic(
 	].join("\n");
 
 	const evidenceDir = resolve(opts.outDir, opts.version, "load");
-	mkdirSync(evidenceDir, { recursive: true });
+	resetDir(evidenceDir, opts.outDir);
 
 	const child: ChildProcess = spawn("bun", ["-e", code], {
 		cwd: pluginPath,

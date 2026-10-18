@@ -1,3 +1,21 @@
+# v1.1 M6: reset evidence dirs per case; reserve tool ids; validate --opencode and --scenario (2026-10-18)
+
+- Pre-fix run matched the brief: `run-inputs` failed to load
+  (`Export named 'parseRunArgs' not found`), `scenario-rules` 0 pass / 2 fail.
+- `src/util/fs.ts`: new `resetDir` (rm -rf + mkdir -p, refuses any dir not
+  strictly inside root). All four tiers reset their evidence dir.
+  `src/config/schema.ts`: `versionSchema` exported, `load`/`bun-test`
+  reserved, workspace `..`/absolute rejected. `src/cli.ts`: `parseRunArgs`
+  + `RunFlags` exported, `--opencode` validated like `opencode.versions`.
+  `src/run.ts`: unknown `--scenario` ids throw `ConfigError` (exit 2).
+- Acceptance: new files 6 pass, 0 fail; `bun run check` 236 pass + the same
+  single environmental `stub.test.ts > recordFile` failure (/tmp inodes still
+  100% — see M4 note; 236 + 1 = all 237 tests, so nothing else is red).
+- M1 stale-evidence re-run (fresh `review/spike-v1.1`, real opencode 2.0.26,
+  `TMPDIR=/dev/shm/ocz`): `run1 exit=0`, `run2 exit=1`, `run3 exit=1`,
+  inventory counts `stale-out:1` and `stale-out-fresh:1`. B5 fixed.
+- `bun run format`: no fixes applied.
+
 # v1.1 M5: budget exhaustion fails started cases; one budget per run (2026-10-18)
 
 - Pre-fix run matched the brief exactly: `live-loop` 5 pass / 1 fail (the

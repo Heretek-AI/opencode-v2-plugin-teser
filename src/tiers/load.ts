@@ -2,7 +2,7 @@
 // assert it registers (inventory), stays silent in the logs, and provides
 // every expected tool/command/agent/skill/mcp name.
 //
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ConfigError } from "../config/load.ts";
 import { errors, textOf, usage } from "../opencode/events.ts";
@@ -12,6 +12,7 @@ import { probePluginDirs, readProbe } from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
 import { type RunOutput, Sandbox } from "../sandbox/sandbox.ts";
 import { startStub } from "../stub/stub.ts";
+import { resetDir } from "../util/fs.ts";
 
 // Re-exported so existing importers (`./load.ts`) keep working.
 export type { CaseResult } from "../report/results.ts";
@@ -63,7 +64,7 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 	const serverEntry = opts.serverEntry;
 
 	const evidenceDir = resolve(opts.outDir, opts.version, "load");
-	mkdirSync(evidenceDir, { recursive: true });
+	resetDir(evidenceDir, opts.outDir);
 
 	const stub = await startStub({
 		script: [{ text: "ok" }],

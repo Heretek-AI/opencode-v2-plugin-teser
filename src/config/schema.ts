@@ -1,11 +1,14 @@
 // Config + scenario schemas (zod v4). Every object is `.strict()` so typos
 // fail validation instead of silently passing (SPEC 5.1, 5.2).
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const SCENARIO_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+// Case ids the runner itself uses: tier 1 ("load") and the escape hatch.
+const RESERVED_IDS = ["load", "bun-test"];
 
-const versionSchema = z.union([
+export const versionSchema = z.union([
 	z.literal("latest"),
 	z.string().regex(VERSION_RE, 'must be semver (x.y.z) or "latest"'),
 ]);
@@ -234,6 +237,22 @@ export const ScenarioSchema = z
 	.strict()
 	.superRefine((val, ctx) => {
 		const tag = `scenario "${val.id}"`;
+		if (RESERVED_IDS.includes(val.id)) {
+			ctx.addIssue({
+				code: "custom",
+				path: ["id"],
+				message: `${tag}: id "${val.id}" is reserved (the tool uses it for its own case and evidence dir)`,
+			});
+		}
+		for (const key of Object.keys(val.workspace ?? {})) {
+			if (isAbsolute(key) || key.split(/[\\/]/).includes("..")) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["workspace", key],
+					message: `${tag}: workspace path "${key}" must be relative and stay inside the project dir`,
+				});
+			}
+		}
 		if (val.mode === "scripted" && val.script === undefined) {
 			ctx.addIssue({
 				code: "custom",

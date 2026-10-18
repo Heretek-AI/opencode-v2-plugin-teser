@@ -19,6 +19,7 @@ import {
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigError, loadAll } from "./config/load.ts";
+import { versionSchema } from "./config/schema.ts";
 import { type Entries, ensureEntriesOrThrow } from "./plugin/entry.ts";
 import {
 	appendStepSummary,
@@ -81,7 +82,7 @@ function collectValues(raw: string[]): string[] {
 	return out;
 }
 
-interface RunFlags {
+export interface RunFlags {
 	tiers: TierName[];
 	scenarios: string[];
 	opencodes: string[];
@@ -92,7 +93,7 @@ interface RunFlags {
 	quiet: boolean;
 }
 
-function parseRunArgs(args: string[]): RunFlags {
+export function parseRunArgs(args: string[]): RunFlags {
 	const tiers: TierName[] = [];
 	const scenarios: string[] = [];
 	const opencodes: string[] = [];
@@ -136,7 +137,16 @@ function parseRunArgs(args: string[]): RunFlags {
 			if (arg === "--opencode") {
 				i++;
 			}
-			opencodes.push(...collectValues([raw]));
+			for (const version of collectValues([raw])) {
+				// The version becomes an evidence path segment, so it must
+				// never contain path syntax: same rule as opencode.versions.
+				if (!versionSchema.safeParse(version).success) {
+					throw new UsageError(
+						`Invalid --opencode ${JSON.stringify(version)}: expected x.y.z or "latest".`,
+					);
+				}
+				opencodes.push(version);
+			}
 		} else if (arg === "--out" || arg.startsWith("--out=")) {
 			out =
 				arg === "--out"
