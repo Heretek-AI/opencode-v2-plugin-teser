@@ -76,11 +76,11 @@ describe("resolveEntries", () => {
 			resolve(dir, "custom/entry.ts"),
 		);
 	});
-	test("missing explicit entry falls through to detection", () => {
+	test("missing explicit entry throws instead of falling back", () => {
 		const dir = makeDir();
 		writeFile(dir, "server.ts");
-		expect(resolveEntries(dir, "does/not-exist.ts").server).toBe(
-			resolve(dir, "server.ts"),
+		expect(() => resolveEntries(dir, "does/not-exist.ts")).toThrow(
+			/plugin\.entry "does\/not-exist\.ts" does not exist/,
 		);
 	});
 	test("absolute explicit entry is used as is", () => {

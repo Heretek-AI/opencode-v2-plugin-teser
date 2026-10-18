@@ -19,7 +19,7 @@ import {
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigError, loadAll } from "./config/load.ts";
-import { ensureEntriesOrThrow } from "./plugin/entry.ts";
+import { type Entries, ensureEntriesOrThrow } from "./plugin/entry.ts";
 import {
 	appendStepSummary,
 	deriveAllowedVersions,
@@ -237,15 +237,32 @@ async function cmdValidate(): Promise<number> {
 			logger.warn(warning);
 		}
 		const pluginPath = resolve(cwd, config.plugin.path);
-		const entries = ensureEntriesOrThrow(pluginPath, config.plugin.entry);
-		const tuiOnly = isTuiOnly(config, entries);
+		let entries: Entries | undefined;
+		try {
+			entries = ensureEntriesOrThrow(pluginPath, config.plugin.entry);
+		} catch (error) {
+			// The entry may be a build output that `validate` never builds;
+			// `run` resolves entries again after plugin.build.
+			if (
+				!(error instanceof ConfigError) ||
+				config.plugin.build === undefined
+			) {
+				throw error;
+			}
+			logger.warn(
+				`${error.message} (plugin.build is set, so run checks again after building).`,
+			);
+		}
+		const tuiOnly = entries !== undefined && isTuiOnly(config, entries);
 		const byMode = new Map<string, number>();
 		for (const scenario of scenarios) {
 			byMode.set(scenario.mode, (byMode.get(scenario.mode) ?? 0) + 1);
 		}
 		console.log(`plugin: ${pluginPath}${tuiOnly ? " (TUI-only)" : ""}`);
 		console.log(
-			`entries: server=${entries.server ?? "-"} tui=${entries.tui ?? "-"}`,
+			entries === undefined
+				? "entries: not found yet (created by plugin.build?)"
+				: `entries: server=${entries.server ?? "-"} tui=${entries.tui ?? "-"}`,
 		);
 		console.log(`opencode versions: ${config.opencode.versions.join(", ")}`);
 		console.log(

@@ -7,7 +7,6 @@ import { join, resolve } from "node:path";
 import { ConfigError } from "../config/load.ts";
 import { errors, textOf, usage } from "../opencode/events.ts";
 import { parseLogs, pluginLogProblems } from "../opencode/logs.ts";
-import { resolveEntries } from "../plugin/entry.ts";
 import { writeShim } from "../plugin/shim.ts";
 import { probePluginDirs, readProbe } from "../probe/read.ts";
 import type { CaseResult } from "../report/results.ts";
@@ -27,6 +26,8 @@ export interface LoadTierExpected {
 
 export interface RunLoadOptions {
 	pluginPath: string;
+	/** Absolute server entry, resolved once by the caller (honors plugin.entry). */
+	serverEntry: string;
 	pluginOptions?: Record<string, unknown>;
 	opencodeBin: string;
 	outDir: string;
@@ -59,15 +60,7 @@ function sourcePathOf(source: unknown): string | undefined {
  */
 export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 	const pluginPath = resolve(opts.pluginPath);
-	const entries = resolveEntries(pluginPath);
-	if (entries.server === undefined) {
-		throw new ConfigError(
-			`No server entry found under ${pluginPath}: ` +
-				`looked for package.json exports["./server"]/["."], main, ` +
-				`then server.{ts,js,mjs} and index.{ts,js,mjs}.`,
-		);
-	}
-	const serverEntry = entries.server;
+	const serverEntry = opts.serverEntry;
 
 	const evidenceDir = resolve(opts.outDir, opts.version, "load");
 	mkdirSync(evidenceDir, { recursive: true });
@@ -149,10 +142,12 @@ export async function runLoad(opts: RunLoadOptions): Promise<CaseResult> {
 				`plugin setup failed: ${firstLines(String(plugin.error ?? "unknown error"))}`,
 			);
 		}
-		const problems = pluginLogProblems(parseLogs(run.stderr), {
-			id: plugin?.id,
-			path: shimServerJs,
-		});
+		const lines = parseLogs(run.stderr);
+		// Stack traces name the real entry, not the shim: check both paths.
+		const problems = [
+			...pluginLogProblems(lines, { id: plugin?.id, path: shimServerJs }),
+			...pluginLogProblems(lines, { path: serverEntry }),
+		].filter((line, index, all) => all.indexOf(line) === index);
 		for (const line of problems) {
 			failures.push(`plugin log problem: ${line._raw}`);
 		}

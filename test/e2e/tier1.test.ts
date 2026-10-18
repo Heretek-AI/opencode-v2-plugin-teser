@@ -25,6 +25,15 @@ function opencodeBin(): string {
 	);
 }
 
+/** The fixture's server entry, resolved the way `run` resolves it. */
+function serverEntryOf(name: string): string {
+	const entry = resolveEntries(join(FIXTURES, name)).server;
+	if (entry === undefined) {
+		throw new Error(`fixture ${name} has no server entry`);
+	}
+	return entry;
+}
+
 function outDir(name: string): string {
 	return mkdtempSync(join(tmpdir(), `tier1-${name}-`));
 }
@@ -33,6 +42,7 @@ describe("tier 1 (load)", () => {
 	test("tool-basic passes with the expected tool listed", async () => {
 		const result = await runLoad({
 			pluginPath: join(FIXTURES, "tool-basic"),
+			serverEntry: serverEntryOf("tool-basic"),
 			opencodeBin: opencodeBin(),
 			outDir: outDir("tool-basic"),
 			version: "2.0.26",
@@ -47,6 +57,7 @@ describe("tier 1 (load)", () => {
 	test("throws fails with fixture boom", async () => {
 		const result = await runLoad({
 			pluginPath: join(FIXTURES, "throws"),
+			serverEntry: serverEntryOf("throws"),
 			opencodeBin: opencodeBin(),
 			outDir: outDir("throws"),
 			version: "2.0.26",
@@ -69,6 +80,7 @@ describe("tier 1 (load)", () => {
 	test("missing expected tool is reported", async () => {
 		const result = await runLoad({
 			pluginPath: join(FIXTURES, "tool-basic"),
+			serverEntry: serverEntryOf("tool-basic"),
 			opencodeBin: opencodeBin(),
 			outDir: outDir("missing-tool"),
 			version: "2.0.26",

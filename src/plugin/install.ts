@@ -1,12 +1,19 @@
 // Run a plugin's install/build shell step before any tier runs.
 import { type ChildProcess, spawn } from "node:child_process";
-import { ConfigError } from "../config/load.ts";
+
+/** A plugin install/build command failed: the plugin's failure (exit 1), not a config error. */
+export class StepError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "StepError";
+	}
+}
 
 /**
  * Run `command` in `cwd` via the platform shell (bash -lc on POSIX,
  * cmd /c on Windows) with async spawn, streaming the child's output to
  * our own stdout/stderr. Never sync-spawn: the stub model server lives in
- * this process during tier runs. Throws ConfigError (exit 2 upstream) when
+ * this process during tier runs. Throws StepError (exit 1 upstream) when
  * the command fails.
  */
 export function runStep(
@@ -26,7 +33,7 @@ export function runStep(
 			});
 		} catch (error) {
 			reject(
-				new ConfigError(
+				new StepError(
 					`${name} step failed to start (${command}): ${String(error)}`,
 				),
 			);
@@ -40,7 +47,7 @@ export function runStep(
 		});
 		child.on("error", (error) => {
 			reject(
-				new ConfigError(`${name} step failed to start (${command}): ${error}`),
+				new StepError(`${name} step failed to start (${command}): ${error}`),
 			);
 		});
 		child.on("close", (code, signal) => {
@@ -52,7 +59,7 @@ export function runStep(
 				signal !== null && signal !== undefined
 					? `signal ${signal}`
 					: `exit code ${code ?? "unknown"}`;
-			reject(new ConfigError(`${name} step failed (${command}): ${detail}.`));
+			reject(new StepError(`${name} step failed (${command}): ${detail}.`));
 		});
 	});
 }

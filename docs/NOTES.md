@@ -1,3 +1,21 @@
+# v1.1 M3: build before entries, serverEntry plumbing (2026-10-18)
+
+- New `test/unit/run-entry.test.ts` failed to load before the fix
+  (`Export named 'StepError' not found`), then went 1 pass / 4 fail after
+  the `StepError` step only — matching the brief's predicted sequence.
+- `src/plugin/install.ts`: `ConfigError` -> `StepError` (3 sites + doc
+  comment). `src/run.ts`: install/build moved before `ensureEntriesOrThrow`,
+  `serverEntry: entries.server` passed to tier 1. `src/tiers/load.ts`:
+  takes `serverEntry`, checks both shim and real paths in logs.
+  `src/plugin/entry.ts`: missing explicit entry throws `ConfigError`.
+  `src/cli.ts`: `validate` warns (exit 0) when the entry is missing but
+  `plugin.build` is set. `test/unit/entry.test.ts` + `test/e2e/tier1.test.ts`
+  updated per the brief.
+- Acceptance: `run-entry.test.ts` 5 pass; `bun run check` 222 pass;
+  `tier1.test.ts + cli.test.ts` 10 pass. Note: /tmp inodes were 100% used
+  by other sessions' leftovers, so e2e ran with `TMPDIR=/dev/shm/ocz`
+  (same workaround as the audit report); unit tests were unaffected.
+
 # v1.1 M2: fake opencode binary and shared test setup (2026-10-18)
 
 Toolchain: bun 1.4.2, `opencode v2.0.26` pinned binary.

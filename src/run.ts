@@ -1,7 +1,8 @@
-// Orchestrator for `opencode-plugin-ci run` (M10 order):
-// 1. Load + validate config/scenarios.
-// 2. Resolve entries (exit 2 when neither server nor TUI exists).
-// 3. Run plugin.install / plugin.build once.
+// Orchestrator for `opencode-plugin-ci run`:
+// 1. Load + validate config/scenarios (and every --scenario id).
+// 2. Run plugin.install / plugin.build once (a failure is exit 1).
+// 3. Resolve entries (exit 2 when neither server nor TUI exists). This must
+//    follow the build: the entry is often a build output such as dist/.
 // 4. For each opencode version: resolve binary, tier 1 (or static tier 1
 //    for TUI-only plugins), then tier 2 (scripted), then tier 3 (live,
 //    sequential with a shared run-wide budget).
@@ -167,14 +168,8 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 	}
 
 	const pluginPath = resolve(cwd, config.plugin.path);
-	// 2. Resolve entries (throws ConfigError when nothing resolves).
-	const entries = ensureEntriesOrThrow(pluginPath, config.plugin.entry);
-	const tuiOnly = isTuiOnly(config, entries);
-	if (tuiOnly) {
-		logger.info("TUI-only plugin: tier 1 is static; tiers 2/3 are skipped.");
-	}
-
-	// 3. Install + build once, before any tier.
+	// 2. Install + build once, before resolving entries: the entry is often
+	// a build output (dist/server.js) that does not exist in a fresh checkout.
 	if (config.plugin.install !== undefined) {
 		logger.info(`Running install step: ${config.plugin.install}`);
 		await runStep("install", config.plugin.install, pluginPath);
@@ -182,6 +177,13 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 	if (config.plugin.build !== undefined) {
 		logger.info(`Running build step: ${config.plugin.build}`);
 		await runStep("build", config.plugin.build, pluginPath);
+	}
+
+	// 3. Resolve entries (throws ConfigError when nothing resolves).
+	const entries = ensureEntriesOrThrow(pluginPath, config.plugin.entry);
+	const tuiOnly = isTuiOnly(config, entries);
+	if (tuiOnly) {
+		logger.info("TUI-only plugin: tier 1 is static; tiers 2/3 are skipped.");
 	}
 
 	const versions =
@@ -222,6 +224,7 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 				? await runUiStatic({ pluginPath, outDir, version })
 				: await runLoad({
 						pluginPath,
+						serverEntry: entries.server as string,
 						pluginOptions: config.plugin.options,
 						opencodeBin: bin,
 						outDir,

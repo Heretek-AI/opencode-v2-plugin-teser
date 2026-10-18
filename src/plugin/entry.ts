@@ -157,9 +157,10 @@ const TUI_FILES = ["tui.ts", "tui.js", "tui.mjs"];
 
 /**
  * Resolve absolute server/tui entry paths. An explicit entry is joined to
- * pluginPath; when it names an existing file it wins, otherwise resolution
- * falls through to the default order (so a typo surfaces as "no entry"
- * instead of a crash). Paths that resolve to nothing are left undefined.
+ * pluginPath and must name an existing file: a missing explicit entry throws
+ * ConfigError instead of silently falling back to auto-detection (a typo
+ * must never test a different file). Other paths that resolve to nothing are
+ * left undefined.
  */
 export function resolveEntries(pluginPath: string, explicit?: string): Entries {
 	const entries: Entries = {};
@@ -168,17 +169,19 @@ export function resolveEntries(pluginPath: string, explicit?: string): Entries {
 
 	if (explicit !== undefined && explicit.length > 0) {
 		const candidate = abs(explicit);
-		if (isFile(candidate)) {
-			entries.server = candidate;
-			return entries;
+		if (!isFile(candidate)) {
+			throw new ConfigError(
+				`plugin.entry ${JSON.stringify(explicit)} does not exist (resolved to ${candidate}). ` +
+					"Fix the path, or check that plugin.build creates it.",
+			);
 		}
-		// Fall through: the explicit path names nothing, so keep looking
-		// and let the caller report "no server entry" with full context.
+		entries.server = candidate;
 	}
 
 	const pkg = readPackageJson(pluginPath);
 
-	const serverTarget = serverFromExports(pkg);
+	const serverTarget =
+		entries.server === undefined ? serverFromExports(pkg) : undefined;
 	if (serverTarget !== undefined) {
 		const candidate = joinTarget(pluginPath, serverTarget);
 		if (isFile(candidate)) {
