@@ -24,16 +24,6 @@ export function excerpt(value: unknown, max: number = TRUNCATE_MAX): string {
 }
 
 /**
- * Env names that used to mark a value as secret-bearing. Kept for API
- * compatibility; no longer used for scrubbing.
- *
- * @deprecated Host-env scanning was removed: it scrubbed innocuous values
- * (e.g. `TOKENIZERS_PARALLELISM=false`) out of persisted evidence and broke
- * JSONL files. Scrubbing now covers only explicitly passed live-key values.
- */
-export const SECRET_NAME_RE = /KEY|TOKEN|SECRET|PASSWORD|AUTH|COOKIE/i;
-
-/**
  * Minimum secret length worth scrubbing. Shorter values (a one-char flag, a
  * port number, or common words like "false") would nuke unrelated evidence
  * text.

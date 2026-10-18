@@ -45,7 +45,8 @@ export async function runScenario(
 		script: scenario.script ?? [],
 		recordFile: join(evidenceDir, "stub-requests.jsonl"),
 		// Configured live-key values may have innocuous names: pass them
-		// explicitly on top of the secret-name env scan.
+		// explicitly. Host env is never scanned — only these live-key values
+		// are scrubbed.
 		redactValues: collectSecretValues(collectLiveKeys(opts.config)),
 	});
 	// The shim lives inside the evidence dir (which is kept), not inside

@@ -1,5 +1,7 @@
 # AUDIT_REPORT_FINDINGS: opencode-v2-plugin-teser
 
+> Status: describes v1 at `af6675c`; the OCI-6.2 remediation was later reverted — see R1 in `review-main-8aa4d61`; do not follow stale advice.
+
 ## Baseline
 
 - Commit: `af6675cc17e994faf4b9c8df3f386a65097fb489`

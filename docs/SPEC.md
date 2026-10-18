@@ -312,7 +312,7 @@ This is ported from `IUMBTEMS/scripts/e2e-gate.ts` and applies only to live-tier
 - **Acknowledgments**: `.opencode-ci/acknowledgments.json` in the plugin repo has the format `{ "version": 1, "acknowledgments": [{ "case", "reason", "issue", "date" }] }`. It is human-written; the tool never writes it. It is fail-closed: a malformed file fails the gate.
 - **No history**: a red live tier with no history to judge it against exits 2. The Action reports this as a failure unless `gate.bootstrap: allow` is set, for the first runs in a new repo.
 - **Local runs**: the gate is skipped locally unless `--gate` is passed. It then needs `gh`, a token (`GH_TOKEN` or `GITHUB_TOKEN`), `GITHUB_REPOSITORY` and a branch (`GITHUB_BASE_REF` or `GITHUB_REF_NAME`); without them it falls back to "fail on any live failure".
-- **Matrix builds**: artifact names must be unique within a workflow run, so each leg sets its own `artifact-name`, and that same name is the leg's gate history. No per-leg config is needed. Matrix legs SHOULD use a distinct `artifact-name` so each leg reads its own history; validation does NOT enforce this.
+- **Matrix builds**: artifact names must be unique within a workflow run, so each leg sets its own `artifact-name`, and that same name is the leg's gate history. No per-leg config is needed; validation does NOT enforce distinct names.
 
 ## 8. Packaging
 

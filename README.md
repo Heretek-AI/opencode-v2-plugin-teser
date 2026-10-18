@@ -299,8 +299,6 @@ is true, and `--gate` was passed or `GITHUB_ACTIONS == "true"`. Without
 **Matrix builds:** artifact names must be unique within a workflow run, so
 give each matrix leg a distinct `artifact-name` Action input. The Action
 passes it to the CLI as `--gate-artifact`, so each leg reads its own
-history; no config change is needed. Matrix legs SHOULD use a distinct
-artifact-name (passed as `--gate-artifact`) so each leg reads its own
 history; no config change is needed, and validation does NOT enforce this. Example:
 
 ```yaml
@@ -358,8 +356,8 @@ jobs:
   NOT contain secrets — that is the scenario author's responsibility**.
   Never print or record secret values (a scenario that runs `env` or
   `cat .env` persists the key into the uploaded evidence).
-- As defense in depth, known live secret values (from secret-like env vars
-  and `live.keys`) are scrubbed to `[redacted]` in `report.md`,
+- As defense in depth, explicitly configured live-key values (`live.keys`)
+  are scrubbed to `[redacted]` in `report.md`,
   `results.json` failures, `stub-requests.jsonl`, `events.jsonl` and
   `stderr.log` before they are written. `probe.jsonl` stays raw on purpose,
   so `notContains`-style assertions still see — and fail on — leaked values.
