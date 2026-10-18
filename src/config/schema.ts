@@ -60,9 +60,9 @@ const gateConfigSchema = z
 		enabled: z.boolean().default(true),
 		bootstrap: z.enum(["fail", "allow"]).default("fail"),
 		workflow: z.string().min(1).optional(),
-		// Artifact name the gate downloads history from. Must match the
-		// `artifact-name` input of the GitHub Action (M13); matrix users
-		// set a distinct name per leg here and there.
+		// Artifact name the gate downloads history from. `run --gate-artifact`
+		// overrides it; the GitHub Action passes its `artifact-name` input
+		// that way, so matrix legs never need per-leg config.
 		artifact: z.string().min(1).default("opencode-plugin-ci-results"),
 	})
 	.strict();

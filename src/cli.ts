@@ -4,6 +4,7 @@
 // opencode-plugin-ci validate
 // opencode-plugin-ci run         [--tier load|scripted|live]... [--scenario id]...
 //                                [--opencode v]... [--out dir] [--keep] [--gate]
+//                                [--gate-artifact name]
 //                                [--verbose] [--quiet]
 // opencode-plugin-ci report      [<results.json>]
 // opencode-plugin-ci --version | --help
@@ -36,7 +37,7 @@ const USAGE = `opencode-plugin-ci
 Usage:
   opencode-plugin-ci init [--force]
   opencode-plugin-ci validate
-  opencode-plugin-ci run [--tier load|scripted|live] [--scenario <id>] [--opencode <v>] [--out <dir>] [--keep] [--gate] [--verbose] [--quiet]
+  opencode-plugin-ci run [--tier load|scripted|live] [--scenario <id>] [--opencode <v>] [--out <dir>] [--keep] [--gate] [--gate-artifact <name>] [--verbose] [--quiet]
   opencode-plugin-ci report [<results.json>]
   opencode-plugin-ci --version
   opencode-plugin-ci --help
@@ -89,6 +90,7 @@ export interface RunFlags {
 	out?: string;
 	keep: boolean;
 	gate: boolean;
+	gateArtifact?: string;
 	verbose: boolean;
 	quiet: boolean;
 }
@@ -98,6 +100,7 @@ export function parseRunArgs(args: string[]): RunFlags {
 	const scenarios: string[] = [];
 	const opencodes: string[] = [];
 	let out: string | undefined;
+	let gateArtifact: string | undefined;
 	let keep = false;
 	let gate = false;
 	let verbose = false;
@@ -155,6 +158,17 @@ export function parseRunArgs(args: string[]): RunFlags {
 			if (arg === "--out") {
 				i++;
 			}
+		} else if (
+			arg === "--gate-artifact" ||
+			arg.startsWith("--gate-artifact=")
+		) {
+			gateArtifact =
+				arg === "--gate-artifact"
+					? takeValue(args, i, "--gate-artifact")
+					: arg.slice("--gate-artifact=".length);
+			if (arg === "--gate-artifact") {
+				i++;
+			}
 		} else if (arg === "--keep") {
 			keep = true;
 		} else if (arg === "--gate") {
@@ -170,7 +184,17 @@ export function parseRunArgs(args: string[]): RunFlags {
 			throw new UsageError(`Unknown argument for run: ${arg}`);
 		}
 	}
-	return { tiers, scenarios, opencodes, out, keep, gate, verbose, quiet };
+	return {
+		tiers,
+		scenarios,
+		opencodes,
+		out,
+		keep,
+		gate,
+		gateArtifact,
+		verbose,
+		quiet,
+	};
 }
 
 function exampleSourceDir(): string {
@@ -311,6 +335,7 @@ async function cmdRun(args: string[]): Promise<number> {
 			out: flags.out,
 			keep: flags.keep,
 			gate: flags.gate,
+			gateArtifact: flags.gateArtifact,
 			verbose: flags.verbose,
 			quiet: flags.quiet,
 		});

@@ -5,7 +5,7 @@
 // entry per sampled run as a `GateHistoryRun` (the verbatim verdict input)
 // instead of an inline tally. Every external call goes through the runner
 // so unit tests never touch the network.
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GateHistoryRun } from "./verdict.ts";
@@ -74,6 +74,22 @@ export function parseWorkflowName(ref: string | undefined): string | undefined {
 		return undefined;
 	}
 	return file;
+}
+
+/**
+ * Branch whose runs form the gate history. On pull_request runs
+ * GITHUB_REF_NAME is "<n>/merge", which no run is ever filed under (gh lists
+ * runs by head branch), so PR runs read the target branch's history from
+ * GITHUB_BASE_REF, which GitHub sets only on pull request events.
+ */
+export function historyBranch(
+	env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+	const base = env.GITHUB_BASE_REF;
+	if (base !== undefined && base.length > 0) {
+		return base;
+	}
+	return env.GITHUB_REF_NAME;
 }
 
 /** Resolve the workflow file name: explicit config wins, else GITHUB_WORKFLOW_REF. */
@@ -154,6 +170,21 @@ export async function fetchHistory(
 
 	const tmpRoot =
 		opts.tmpDir ?? mkdtempSync(join(tmpdir(), "opencode-ci-gate-"));
+	try {
+		return await downloadHistory(opts, run, runs, tmpRoot);
+	} finally {
+		if (opts.tmpDir === undefined) {
+			rmSync(tmpRoot, { recursive: true, force: true });
+		}
+	}
+}
+
+async function downloadHistory(
+	opts: FetchHistoryOptions,
+	run: CommandRunner,
+	runs: { id: number; createdAt: string }[],
+	tmpRoot: string,
+): Promise<GateHistoryRun[]> {
 	const history: GateHistoryRun[] = [];
 	for (const entry of runs) {
 		const dir = join(tmpRoot, String(entry.id));

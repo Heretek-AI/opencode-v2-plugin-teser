@@ -11,6 +11,7 @@ import { createLogger } from "../util/log.ts";
 import {
 	fetchHistory,
 	gatePrerequisites,
+	historyBranch,
 	resolveWorkflowName,
 } from "./history.ts";
 import {
@@ -201,7 +202,7 @@ export async function runGate(ctx: GateContext): Promise<GateOutcome> {
 	}
 
 	const repo = env.GITHUB_REPOSITORY;
-	const branch = env.GITHUB_REF_NAME;
+	const branch = historyBranch(env);
 	if (
 		repo === undefined ||
 		repo.length === 0 ||

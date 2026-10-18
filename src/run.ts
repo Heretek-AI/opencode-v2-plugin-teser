@@ -47,6 +47,8 @@ export interface RunOptions {
 	out?: string;
 	keep?: boolean;
 	gate?: boolean;
+	/** Overrides gate.artifact; the Action passes its artifact-name input. */
+	gateArtifact?: string;
 	verbose?: boolean;
 	quiet?: boolean;
 }
@@ -468,9 +470,13 @@ export async function runCi(opts?: RunOptions): Promise<RunOutcome> {
 
 	// 7. Gate: when it applies, required-version live failures are decided
 	// by the gate instead of failing directly. Tiers 1 and 2 always fail.
+	const gateConfig: Config =
+		opts?.gateArtifact === undefined
+			? config
+			: { ...config, gate: { ...config.gate, artifact: opts.gateArtifact } };
 	const gateOutcome = await runGate({
 		cwd,
-		config,
+		config: gateConfig,
 		results,
 		requiredVersion: required,
 		gateFlag: opts?.gate === true,

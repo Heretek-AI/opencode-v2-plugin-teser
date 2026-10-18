@@ -15,7 +15,7 @@ inputs:
     description: "Upload evidence + results"
     default: "true"
   artifact-name:
-    description: "Artifact name for evidence + results (must match gate.artifact; use a distinct name per matrix leg)"
+    description: "Artifact name for evidence + results. The gate also reads history from this name, so use a distinct name per matrix leg."
     default: "opencode-plugin-ci-results"
 outputs:
   result:
@@ -42,11 +42,13 @@ runs:
         # Inputs go through env, never interpolated into the script (prevents script injection).
         IN_TIERS: ${{ inputs.tiers }}
         IN_VERSIONS: ${{ inputs.opencode-versions }}
+        IN_ARTIFACT: ${{ inputs.artifact-name }}
         ACTION_PATH: ${{ github.action_path }}
       run: |
         args=()
         IFS=',' read -ra T <<< "$IN_TIERS"; for t in "${T[@]}"; do args+=(--tier "$t"); done
         if [ -n "$IN_VERSIONS" ]; then IFS=',' read -ra V <<< "$IN_VERSIONS"; for v in "${V[@]}"; do args+=(--opencode "$v"); done; fi
+        args+=(--gate-artifact "$IN_ARTIFACT")
         set +e
         bun "$ACTION_PATH/bin/opencode-plugin-ci.ts" run "${args[@]}" --out .opencode-ci/out
         code=$?
