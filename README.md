@@ -28,13 +28,10 @@ in [schema/config.json](schema/config.json) and
 
 From your plugin repo root:
 
-> **NOTE: the package is not published to npm yet** (`0.1.0` unpublished),
-> so `bunx @heretek-ai/opencode-plugin-ci` 404s and the `$schema` URLs below
-> 404 too (editor schema assistance stays dead until publish). Until the
-> first publish, run the CLI from a source checkout: below,
-> `<checkout>` is your clone of this repo, and
-> `bun <checkout>/bin/opencode-plugin-ci.ts ...` takes the place of
-> `bunx @heretek-ai/opencode-plugin-ci ...`.
+> **NOTE:** the package is published as `@heretek-ai/opencode-plugin-ci`,
+> so `bunx @heretek-ai/opencode-plugin-ci ...` works directly. To run from
+> a source checkout instead, `<checkout>` below is your clone of this repo, and
+> `bun <checkout>/bin/opencode-plugin-ci.ts ...` takes the place of `bunx ...`.
 
 ```sh
 # 1. Scaffold starter files (.opencode-ci/config.yaml + an example scenario).

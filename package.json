@@ -1,6 +1,6 @@
 {
 	"name": "@heretek-ai/opencode-plugin-ci",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Verify opencode v2 plugins actually work, locally and in GitHub Actions",
 	"license": "MIT",
 	"type": "module",
