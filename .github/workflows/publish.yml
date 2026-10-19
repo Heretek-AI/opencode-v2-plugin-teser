@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: Upgrade npm for OIDC trusted publishing (requires npm >= 11.5)
+        run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: bun run check
       - name: Verify tag matches package.json version
